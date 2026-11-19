@@ -15,7 +15,8 @@ This checklist separates **source code written** from **hardware-tested features
 
 - [ ] Verify Visual C++ and an appropriately licensed Xbox 360 XDK are installed
 - [ ] Open the solution with the `Xbox 360` build platform available
-- [ ] Compile `NUVIO.xex` successfully in Visual Studio 2010
+- [x] Compile the initial `NUVIO.XEX.xex` successfully in Visual Studio 2010 (XDK 21256)
+- [ ] Compile and display the updated dashboard preview in Xenia
 - [ ] Run the executable from Aurora on a real RGH/JTAG Xbox 360
 - [ ] Confirm the 720p screen displays correctly
 - [ ] Confirm controller navigation and clean exit
@@ -23,8 +24,9 @@ This checklist separates **source code written** from **hardware-tested features
 
 ## Phase 3 — Nuvio interface
 
-- [ ] Draw a real on-screen NUVIO logo and navigation bar
-- [ ] Add a controller-friendly tile layout and smooth selection highlights
+- [x] Add visible NUVIO bitmap text and a header bar (source implemented)
+- [x] Add four controller-friendly colored menu cards (source implemented)
+- [ ] Verify the on-screen dashboard and selection highlights in Xenia
 - [ ] Support poster artwork and details panels
 - [ ] Build Movies, Series, My Library and Settings screens
 - [ ] Add search and browse navigation

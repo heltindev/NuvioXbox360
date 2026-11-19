@@ -9,12 +9,12 @@ This folder is the starting point for our **Xbox 360 RGH/JTAG C++ application**.
 3. Double-click **`NUVIO.XEX.sln`**.
 4. In the Visual Studio toolbar, choose **Debug** and **Xbox 360**.
 5. Choose **Build → Build Solution** (or press `F7`).
-6. On a successful build, look under **`bin/Debug/`** for `NUVIO.xex`.
+6. On a successful build, look under **`Debug/`** for `NUVIO.XEX.xex`, or **`Release/`** for a Release build. The `bin/` folder contains symbol files, not the actual `.xex` on the tested XDK.
 
 If the **Xbox 360** build platform is not offered, stop and check the XDK integration. The normal PC `Win32` or `x64` platform does not produce Xbox 360 code.
 
 > [!WARNING]
-> The solution and XDK-facing source code are **unverified on the user's SDK and hardware**. Some legacy XDK releases may require adjustments to compiler/linker options or the graphics initialization.
+> The dashboard now **compiles on the maintainer's XDK 21256**, but its updated visuals and operation on real Xbox 360 hardware still need testing. Other legacy XDK releases may require compiler or linker adjustments.
 
 ## What the buttons do
 
@@ -25,11 +25,11 @@ If the **Xbox 360** build platform is not offered, stop and check the XDK integr
 | B | Return to the home screen |
 | Back | Exit the app |
 
-The current starter displays **only background colors**; sections and the selected tile are also tracked internally. There are **no logos, posters, film lists, sound or video playback** yet. We will add them incrementally.
+The dashboard now displays a **NUVIO header, visible bitmap text, four colored cards, and a highlighted selection**. A section screen provides a clear return instruction. There are **no posters, film lists, sound or video playback** yet. We will add them incrementally.
 
 ## Source files
 
-- `src/XboxMain.cpp`: console-specific entry point, Direct3D test and controller.
+- `src/XboxMain.cpp`: console-specific entry point, rectangle-based dashboard, bitmap text and controller.
 - `src/NuvioApp.h` and `src/NuvioApp.cpp`: small navigation engine that also runs on a PC.
 - `tests/NuvioCoreTests.cpp`: standalone test for the navigation engine.
 
@@ -47,7 +47,7 @@ Run those commands from the **repository root**. They do not create an `.xex`.
 ## Where we go from here
 
 1. Confirm the Xbox 360 project platform is detected by Visual Studio.
-2. Build the first `.xex` with the licensed XDK.
+2. Test the freshly compiled dashboard in Xenia Canary.
 3. Check video output and controller input on an RGH Xbox 360.
 4. Build a real Nuvio-style 720p dashboard on top of the working console app.
 5. Add metadata, artwork and a media player in later milestones.

@@ -7,8 +7,8 @@ The original Nuvio uses Kotlin Multiplatform and Compose. Xbox 360 uses a differ
 | Feature goal | Xbox 360 approach | Status |
 | --- | --- | --- |
 | App navigation | C++98 state model + controller | Host-tested foundation |
-| Video output | Xbox 360 Direct3D 9 screen initialization | Unverified smoke-test code |
-| Home dashboard | Custom 720p textured UI | Planned |
+| Video output | Xbox 360 Direct3D 9 screen initialization | Solid background verified in Xenia |
+| Home dashboard | Bitmap text, colored cards, then textured UI | Early dashboard compiled; visual test pending |
 | Movies and series | Independent content and metadata model | Planned |
 | Artwork and details | Xbox-compatible textures and caching | Planned |
 | Video/audio player | Hardware-constrained decoding and audio output | Not started |

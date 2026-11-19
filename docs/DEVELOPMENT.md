@@ -10,7 +10,7 @@ When selecting installation features, keep **Visual C++** enabled. The x64 compi
 
 The Xbox 360 build platform is supplied by a **separately installed and appropriately licensed** Xbox 360 XDK, not by ordinary Visual Studio 2010. Do not put Microsoft SDK headers, libraries, executables, or installers in this repository.
 
-With the XDK integration installed, Visual Studio should offer an **Xbox 360** platform for C++ projects. Depending on the XDK version and Windows version, legacy setup may require repair or compatibility work. We have **not** verified the particular XDK version shown in the maintainer's screenshot.
+With the XDK integration installed, Visual Studio should offer an **Xbox 360** platform for C++ projects. The maintainer has successfully compiled the dashboard using **XDK 21256**. Other XDK/Windows combinations may require compatibility adjustments.
 
 ## 3. Open the project
 
@@ -18,11 +18,11 @@ With the XDK integration installed, Visual Studio should offer an **Xbox 360** p
 2. Open `VisualStudio2010/NUVIO.XEX.sln` in Visual Studio 2010.
 3. Select **Debug | Xbox 360**.
 4. Select **Build → Build Solution**.
-5. Check the build output. If successful, find `VisualStudio2010/bin/Debug/NUVIO.xex`.
+5. Check the build output. The tested XDK places `NUVIO.XEX.xex` under `VisualStudio2010/Debug/` or `VisualStudio2010/Release/`. The `bin/` subfolder holds debugging symbol files.
 
 If the project reports that the **Xbox 360 platform is missing**, stop and troubleshoot the XDK installation. Selecting Win32/x64 instead does not fix it.
 
-If the Xbox build reports compiler, API, or linker errors, save the **exact first error message** and the XDK version. The starter intentionally does not claim support for all XDK releases. The real `.XEX` has not yet been built or console-tested here.
+If the Xbox build reports compiler, API, or linker errors, save the **exact first error message** and the XDK version. The source has now compiled to `.xex` with XDK 21256, but the updated visual dashboard has not yet been confirmed in Xenia or on a real console.
 
 ## 4. Local test without the XDK
 

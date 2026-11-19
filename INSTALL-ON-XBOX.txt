@@ -5,12 +5,12 @@ There is NO video playback, internet catalog, or streaming functionality.
 
 After you have successfully compiled the Visual Studio 2010 project:
 
-1. Locate the generated NUVIO.xex under VisualStudio2010/bin/Debug/
-   (or bin/Release/ for the release configuration).
+1. Locate NUVIO.XEX.xex under VisualStudio2010/Debug/
+   (or VisualStudio2010/Release/ for the release configuration).
 2. Copy the .xex file into a folder on a FAT32 USB drive.
 3. Open Aurora > File Manager on your Xbox 360 RGH/JTAG.
-4. Browse to the USB folder and launch NUVIO.xex.
-5. The test screen should show a dark background if initialization works.
+4. Browse to the USB folder and launch NUVIO.XEX.xex.
+5. The updated preview should show the NUVIO title and four menu cards.
 6. Use the D-pad to change selection, A to open a section,
    B to return home, and the Back button to exit.
 

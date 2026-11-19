@@ -29,7 +29,7 @@ The project currently contains **only NUVIO-specific app scaffolding**. No third
 2. Extract the files and open [`VisualStudio2010/NUVIO.XEX.sln`](VisualStudio2010/NUVIO.XEX.sln).
 3. Make sure **Visual C++** and a separately installed, legally licensed **Xbox 360 XDK with Visual Studio integration** are available.
 4. Choose **Debug | Xbox 360** in the toolbar and select **Build → Build Solution**.
-5. If it compiles, look for `VisualStudio2010/bin/Debug/NUVIO.xex` and see [INSTALL-ON-XBOX.txt](INSTALL-ON-XBOX.txt).
+5. If it compiles, look for `VisualStudio2010/Debug/NUVIO.XEX.xex` (or `Release/NUVIO.XEX.xex`) and see [INSTALL-ON-XBOX.txt](INSTALL-ON-XBOX.txt).
 
 **If Visual Studio shows only Win32/x64 instead of Xbox 360**, the required XDK build integration is missing. Installing the standard Visual Studio C++ compiler alone will not build a console executable.
 
@@ -39,14 +39,14 @@ See [Visual Studio starter guide](VisualStudio2010/README.md) and [developer doc
 
 | Feature | Status |
 |---|---|
-| Visual Studio 2010 Xbox 360 solution/project files | ✅ Added; build unverified |
+| Visual Studio 2010 Xbox 360 solution/project files | ✅ Initial version built with XDK 21256 |
 | Small reusable NUVIO menu-state engine | ✅ Host tests passing |
 | Xbox controller handling (D-pad, A, B, Back) | 🧪 Written; hardware test pending |
-| 720p solid-color screen for device testing | 🧪 Written; hardware test pending |
+| 720p dashboard with visible text and selectable cards | ✅ Compiled with XDK 21256; visual test pending |
 | Nuvio-style tile UI, posters, search, library | 🚧 Not implemented |
 | Audio/video playback and network features | 🚧 Not implemented |
 
-The early Xbox test paints a different background for each screen. **There is no on-screen text UI yet.** Use D-pad to change the selection, **A** to open a section, **B** to return home, and **Back** to exit.
+The Xbox dashboard preview draws a NUVIO header, four selectable cards, and controller help using built-in bitmap text. Use D-pad to change selection, **A** to open a section, **B** to return home, and **Back** to exit. **This is only an interface test**; actual content and playback are not available.
 
 ## 📁 Repository structure
 
@@ -54,7 +54,7 @@ The early Xbox test paints a different background for each screen. **There is no
 |---|---|
 | `VisualStudio2010/NUVIO.XEX.sln` | Open this solution in Visual Studio 2010 |
 | `VisualStudio2010/NUVIO.XEX.vcxproj` | Xbox 360 project configuration |
-| `VisualStudio2010/src/XboxMain.cpp` | XDK startup, video clear, controller input |
+| `VisualStudio2010/src/XboxMain.cpp` | XDK startup, bitmap-font UI and controller input |
 | `VisualStudio2010/src/NuvioApp.cpp` | Independent navigation logic |
 | `VisualStudio2010/tests/` | PC-runnable navigation tests |
 | `docs/DEVELOPMENT.md` | Local build instructions |
