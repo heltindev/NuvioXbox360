@@ -1,4 +1,5 @@
-name: Build NUVIO.XEX
+name: '🎮 Compilar NUVIO.XEX'
+run-name: '🎮 NUVIO.XEX — tentativa #${{ github.run_number }}'
 
 on:
   workflow_dispatch:
@@ -16,14 +17,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: nuvio-xex-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validar-codigo:
-    name: '1. Testar codigo no Linux'
+    name: '✅ 1. Verificar o codigo'
     runs-on: ubuntu-24.04
     steps:
-      - name: Baixar codigo-fonte
+      - name: '📥 Baixar o projeto'
         uses: actions/checkout@v4
-      - name: Verificar catalogos e fontes
+      - name: '🧪 Verificar catálogos e complementos'
         run: |
           gcc -std=c17 -Wall -Wextra -Werror -Isrc -Ithird_party/cjson \
             tests/test_stremio.c src/stremio.c third_party/cjson/cJSON.c \
@@ -31,66 +36,100 @@ jobs:
           ./test_stremio
 
   compilar-xex:
-    name: '2. Compilar Xbox 360 PowerPC'
+    name: '🎮 2. Criar o aplicativo para Xbox 360'
     needs: validar-codigo
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
       XSDK_ROOT: ${{ github.workspace }}/deps/xsdk
       TOOLCHAIN_ROOT: ${{ github.workspace }}/.toolchain
-      BUILD_JOBS: '2'
+      BUILD_JOBS: '3'
     steps:
-      - name: Baixar NUVIO.XEX
+      - name: '📥 Baixar os arquivos do projeto'
         uses: actions/checkout@v4
 
-      - name: Instalar ferramentas no Linux
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential bison flex texinfo libgmp-dev \
-            libmpfr-dev libmpc-dev curl xz-utils patch python3 cmake ninja-build git
-
-      - name: Buscar SDK e bibliotecas abertas
+      - name: '📦 Baixar bibliotecas oficiais (versoes fixas)'
         run: |
           mkdir -p deps
-          git clone https://github.com/xenosworks/xsdk.git deps/xsdk
-          git -C deps/xsdk checkout --detach 9e6de98f6b5d737bce0fecd2864edae94bdd2637
-          git clone --branch xenon https://github.com/xenosworks/curl-xenon.git deps/curl-xenon
-          git -C deps/curl-xenon checkout --detach a6b70bd06820e1c625f47fe0e592e08c5daaa6b4
-          git clone --branch xenon https://github.com/xenosworks/mbedtls-xenon.git deps/mbedtls-xenon
-          git -C deps/mbedtls-xenon checkout --detach 591b04adbec4bc5582649601f4407506a610162b
-          git clone --branch xenon https://github.com/xenosworks/glslang-xenon.git deps/glslang-xenon
-          git -C deps/glslang-xenon checkout --detach d2f00185cf5feaa449f6e15c1894fb232b2b6bcd
+          clone_fixed() {
+            git clone --depth 1 --single-branch --branch "$2" "$1" "$3"
+            if [ "$(git -C "$3" rev-parse HEAD)" != "$4" ]; then
+              git -C "$3" fetch --depth 1 origin "$4"
+            fi
+            git -C "$3" checkout --detach "$4"
+          }
+          clone_fixed https://github.com/xenosworks/xsdk.git main deps/xsdk 9e6de98f6b5d737bce0fecd2864edae94bdd2637
+          clone_fixed https://github.com/xenosworks/curl-xenon.git xenon deps/curl-xenon a6b70bd06820e1c625f47fe0e592e08c5daaa6b4
+          clone_fixed https://github.com/xenosworks/mbedtls-xenon.git xenon deps/mbedtls-xenon 591b04adbec4bc5582649601f4407506a610162b
+          clone_fixed https://github.com/xenosworks/glslang-xenon.git xenon deps/glslang-xenon d2f00185cf5feaa449f6e15c1894fb232b2b6bcd
 
-      - name: Recuperar compilador do cache (se existir)
-        id: cache-toolchain
-        uses: actions/cache@v4
+      - name: '⚡ Procurar compilador ja pronto no cache'
+        id: cache-compiler
+        uses: actions/cache/restore@v4
         with:
           path: .toolchain
-          key: xsdk-gcc-15.3-x64-v1
+          key: xsdk-gcc-15.3-9e6de98-v2
 
-      - name: Criar compilador PowerPC do Xbox 360
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+      - name: '🛠️ Instalar ferramentas (somente quando necessario)'
+        if: steps.cache-compiler.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bison flex texinfo libgmp-dev libmpfr-dev \
+            libmpc-dev curl xz-utils patch python3 cmake ninja-build git
+
+      - name: '🏗️ Criar compilador PowerPC (primeira compilacao)'
+        if: steps.cache-compiler.outputs.cache-hit != 'true'
         run: |
           PREFIX="$TOOLCHAIN_ROOT" \
             WORK="$RUNNER_TEMP/xsdk-toolchain-work" \
             JOBS="$BUILD_JOBS" \
-            deps/xsdk/tools/toolchain/build.sh
+            bash deps/xsdk/tools/toolchain/build.sh
+          test -x "$TOOLCHAIN_ROOT/bin/powerpc-xsdk-elf-gcc"
 
-      - name: Preparar compilador de shaders
+      - name: '💾 Guardar compilador para proximas vezes'
+        if: steps.cache-compiler.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .toolchain
+          key: xsdk-gcc-15.3-9e6de98-v2
+
+      - name: '⚡ Procurar shaders ja prontos no cache'
+        id: cache-shaders
+        uses: actions/cache/restore@v4
+        with:
+          path: .shader-cache
+          key: glslang-xenon-d2f00185-v1
+
+      - name: '🎨 Preparar graficos (somente sem cache)'
+        if: steps.cache-shaders.outputs.cache-hit != 'true'
         run: |
           (cd deps/glslang-xenon && python3 update_glslang_sources.py)
           cmake -S deps/glslang-xenon -B deps/glslang-xenon/build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release -DENABLE_OPT=ON \
             -DSPIRV_SKIP_EXECUTABLES=ON -DGLSLANG_TESTS=OFF
           cmake --build deps/glslang-xenon/build --parallel "$BUILD_JOBS"
-          cp deps/glslang-xenon/build/StandAlone/glslang "$TOOLCHAIN_ROOT/bin/glslang"
+          mkdir -p .shader-cache
+          cp deps/glslang-xenon/build/StandAlone/glslang .shader-cache/glslang
 
-      - name: Compilar o xsdk
+      - name: '💾 Guardar shaders para proximas vezes'
+        if: steps.cache-shaders.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .shader-cache
+          key: glslang-xenon-d2f00185-v1
+
+      - name: '🖼️ Ativar ferramentas graficas'
+        run: |
+          cp .shader-cache/glslang "$TOOLCHAIN_ROOT/bin/glslang"
+          test -s "$TOOLCHAIN_ROOT/bin/glslang"
+
+      - name: '⚙️ Preparar recursos do Xbox 360'
         run: |
           make -C "$XSDK_ROOT" -j "$BUILD_JOBS" \
             TOOLCHAIN="$TOOLCHAIN_ROOT/bin/powerpc-xsdk-elf-"
 
-      - name: Gerar NUVIO.xex
+      - name: '🎮 Gerar o arquivo NUVIO.xex'
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$XSDK_ROOT/cmake/xsdk.cmake" \
@@ -101,17 +140,49 @@ jobs:
           cmake --build build --parallel "$BUILD_JOBS"
           test -s build/NUVIO.xex
 
-      - name: Preparar arquivos para testar no Aurora
+      - name: '📁 Organizar arquivos para o Aurora'
         run: |
           mkdir -p dist
           cp build/NUVIO.xex dist/NUVIO.XEX
           cp build/cacert.pem dist/cacert.pem
           cp addon_url.txt stream_addons.txt INSTALAR-NO-XBOX.txt dist/
 
-      - name: Disponibilizar download do NUVIO.XEX
+      - name: '📥 Disponibilizar o download do NUVIO.XEX'
         uses: actions/upload-artifact@v4
         with:
           name: NUVIO-XEX-test
           path: dist/
           if-no-files-found: error
           retention-days: 14
+
+      - name: '✅ Explicar onde baixar o arquivo'
+        if: success()
+        run: |
+          {
+            echo '## 🎮 NUVIO.XEX compilado!'
+            echo ''
+            echo '✅ O teste de compilacao terminou com sucesso.'
+            echo ''
+            echo '### 📥 Como baixar'
+            echo '1. Volte para a pagina desta execucao no GitHub.'
+            echo '2. Role ate **Artifacts** (Arquivos gerados).'
+            echo '3. Baixe **NUVIO-XEX-test**.'
+            echo '4. Descompacte os arquivos e siga **INSTALAR-NO-XBOX.txt**.'
+            echo ''
+            echo '> ⚠️ O video e o cliente torrent ainda estao em desenvolvimento. Compilar nao garante funcionamento no Xbox real.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: '💡 Explicar como identificar um erro'
+        if: failure()
+        run: |
+          {
+            echo '## ⚠️ O NUVIO.XEX ainda nao ficou pronto'
+            echo ''
+            echo 'A compilacao encontrou um erro. **Nao existe download valido nesta tentativa.**'
+            echo ''
+            echo '1. Abra a etapa com o simbolo vermelho ❌.'
+            echo '2. Copie as ultimas linhas do erro.'
+            echo '3. Envie essas linhas no ChatGPT para corrigirmos.'
+            echo ''
+            echo 'ℹ️ Na primeira compilacao, o GitHub precisa montar o compilador PowerPC. Depois disso o cache acelera as proximas tentativas.'
+          } >> "$GITHUB_STEP_SUMMARY"
