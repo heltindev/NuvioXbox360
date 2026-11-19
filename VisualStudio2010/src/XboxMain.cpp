@@ -1,9 +1,13 @@
-// NUVIO.XEX - Xbox 360 XDK dashboard preview.
-// Draws a visible 720p interface without external fonts, shaders, or assets.
-// This is a UI/controller test: video playback is not implemented.
+// NUVIO.XEX - 720p streaming-style UI for Xbox 360 XDK.
+// Original native implementation inspired by Nuvio's TV navigation.
+// Posters are decorative procedural placeholders; no video player yet.
 
 #include <xtl.h>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
 #include "NuvioApp.h"
+#include "NuvioCatalog.h"
 
 enum {
     SCREEN_WIDTH = 1280,
@@ -40,7 +44,8 @@ static const FontGlyph kFont[] = {
     {'-',{0,0,0,31,0,0,0}},     {'/',{1,1,2,4,8,16,16}},
     {'|',{4,4,4,4,4,4,4}},       {'!',{4,4,4,4,4,0,4}},
     {'>',{16,8,4,2,4,8,16}},    {'<',{1,2,4,8,4,2,1}},
-    {'?',{14,17,1,2,4,0,4}},    {'+',{0,4,4,31,4,4,0}}
+    {'?',{14,17,1,2,4,0,4}},    {'+',{0,4,4,31,4,4,0}},
+    {'*',{0,21,14,31,14,21,0}}, {'\'',{4,4,4,0,0,0,0}}
 };
 
 static const FontGlyph *FindGlyph(char letter)
@@ -102,6 +107,24 @@ public:
         }
     }
 
+    void Circle(int centerX, int centerY, int radius, D3DCOLOR color)
+    {
+        if (radius <= 0) return;
+        for (int offset = -radius; offset <= radius; offset += 2) {
+            const double squared = static_cast<double>(radius * radius - offset * offset);
+            const int reach = static_cast<int>(std::sqrt(squared));
+            Rect(centerX - reach, centerY + offset, reach * 2 + 1, 2, color);
+        }
+    }
+
+    void Outline(int x, int y, int width, int height, int thickness, D3DCOLOR color)
+    {
+        Rect(x, y, width, thickness, color);
+        Rect(x, y + height - thickness, width, thickness, color);
+        Rect(x, y, thickness, height, color);
+        Rect(x + width - thickness, y, thickness, height, color);
+    }
+
 private:
     IDirect3DDevice9 *m_device;
     D3DCOLOR m_color;
@@ -109,94 +132,236 @@ private:
     unsigned m_count;
 };
 
-static const D3DCOLOR kBackground = D3DCOLOR_ARGB(255, 8, 14, 28);
-static const D3DCOLOR kPanel = D3DCOLOR_ARGB(255, 17, 30, 49);
-static const D3DCOLOR kPanelLight = D3DCOLOR_ARGB(255, 25, 43, 66);
-static const D3DCOLOR kWhite = D3DCOLOR_ARGB(255, 236, 247, 255);
-static const D3DCOLOR kMuted = D3DCOLOR_ARGB(255, 139, 167, 190);
-static const D3DCOLOR kMint = D3DCOLOR_ARGB(255, 100, 233, 196);
-static const D3DCOLOR kGold = D3DCOLOR_ARGB(255, 249, 211, 135);
+static const D3DCOLOR kBackground = D3DCOLOR_ARGB(255, 12, 15, 19);
+static const D3DCOLOR kSide = D3DCOLOR_ARGB(255, 13, 16, 21);
+static const D3DCOLOR kSurface = D3DCOLOR_ARGB(255, 31, 37, 44);
+static const D3DCOLOR kWhite = D3DCOLOR_ARGB(255, 246, 247, 249);
+static const D3DCOLOR kMuted = D3DCOLOR_ARGB(255, 149, 152, 161);
+static const D3DCOLOR kBlue = D3DCOLOR_ARGB(255, 66, 157, 246);
+static const D3DCOLOR kTeal = D3DCOLOR_ARGB(255, 43, 204, 182);
+static const D3DCOLOR kGold = D3DCOLOR_ARGB(255, 252, 174, 40);
 
-static void DrawHeader(UiPainter &ui)
+static D3DCOLOR Rgb(int red, int green, int blue)
 {
-    ui.Rect(0, 0, SCREEN_WIDTH, 96, kPanel);
-    ui.Rect(0, 94, SCREEN_WIDTH, 2, D3DCOLOR_ARGB(255, 41, 74, 87));
-    ui.Rect(50, 22, 58, 55, D3DCOLOR_ARGB(255, 30, 88, 91));
-    ui.Text(62, 32, 5, "N", kMint);
-    ui.Text(130, 27, 6, "NUVIO", kWhite);
-    ui.Text(318, 46, 3, ".XEX", kMint);
-    ui.Text(867, 40, 2, "XBOX 360 | RGH PREVIEW", kMuted);
+    return D3DCOLOR_ARGB(255, red, green, blue);
 }
 
-static void DrawFooter(UiPainter &ui)
+static void DrawBrand(UiPainter &ui, int x, int y, int scale)
 {
-    ui.Rect(0, 663, SCREEN_WIDTH, 57, kPanel);
-    ui.Rect(0, 663, SCREEN_WIDTH, 2, D3DCOLOR_ARGB(255, 34, 65, 77));
-    ui.Text(52, 681, 2, "DPAD NAVIGATE   A SELECT   B BACK   BACK EXIT", kMuted);
-}
-
-static void DrawCard(UiPainter &ui, int index, bool selected)
-{
-    static const char *kTitles[] = { "MOVIES", "SERIES", "MY LIBRARY", "SETTINGS" };
-    static const char *kIcons[] = { "M", "S", "L", "G" };
-    static const D3DCOLOR kColors[] = {
-        D3DCOLOR_ARGB(255, 21, 87, 96),
-        D3DCOLOR_ARGB(255, 75, 50, 107),
-        D3DCOLOR_ARGB(255, 42, 87, 74),
-        D3DCOLOR_ARGB(255, 56, 72, 110)
-    };
-    const int x = 52 + index * 300;
-    const int y = 282;
-    if (selected) {
-        ui.Rect(x - 4, y - 4, 284, 263, kMint);
-        ui.Rect(x - 1, y - 1, 278, 257, kPanelLight);
-    } else {
-        ui.Rect(x, y, 276, 255, kPanel);
+    const int width = 16 * scale;
+    for (int line = 0; line < width; line += scale) {
+        const int inset = line < width / 2 ? width / 2 - line : line - width / 2;
+        const D3DCOLOR tone = line < width / 2 ? Rgb(33, 174, 239) : Rgb(185, 73, 242);
+        ui.Rect(x + line, y + inset, scale, width - 2 * inset, tone);
     }
-
-    ui.Rect(x + 20, y + 18, 236, 110, kColors[index]);
-    ui.Rect(x + 35, y + 34, 76, 78, D3DCOLOR_ARGB(255, 10, 24, 39));
-    ui.Text(x + 49, y + 47, 7, kIcons[index], kWhite);
-    ui.Text(x + 20, y + 150, 3, kTitles[index], selected ? kMint : kWhite);
-    ui.Text(x + 20, y + 202, 2, selected ? "A TO OPEN" : "COMING SOON", kMuted);
+    ui.Circle(x + 8 * scale, y + 8 * scale, 4 * scale, kSide);
+    ui.Text(x + 22 * scale, y + 2 * scale, scale * 2, "NUVIO", kWhite);
 }
 
-static void DrawHome(UiPainter &ui, const NuvioState &state)
+static void DrawBackgroundGlow(UiPainter &ui)
 {
-    ui.Text(54, 125, 2, "HOME  /  DISCOVER  /  LIBRARY", kMint);
-    ui.Text(54, 169, 4, "WELCOME TO NUVIO", kWhite);
-    ui.Text(54, 222, 2, "YOUR MEDIA HUB ON XBOX 360", kMuted);
-    for (int index = 0; index < 4; ++index)
-        DrawCard(ui, index, index == state.selectedTile);
-
-    ui.Rect(52, 566, 1176, 75, kPanel);
-    ui.Rect(52, 566, 6, 75, kGold);
-    ui.Text(78, 580, 2, "DEVELOPMENT PREVIEW", kGold);
-    ui.Text(78, 609, 2, "UI AND CONTROLLER TEST - VIDEO PLAYBACK COMING LATER", kMuted);
+    // Teal-to-near-black gradient evokes the reference sign-in screen.
+    for (int y = 0; y < SCREEN_HEIGHT; y += 8) {
+        const int red = 4 + y * 10 / SCREEN_HEIGHT;
+        const int green = 69 - y * 55 / SCREEN_HEIGHT;
+        const int blue = 59 - y * 42 / SCREEN_HEIGHT;
+        ui.Rect(0, y, SCREEN_WIDTH, 8, Rgb(red, green, blue));
+    }
+    ui.Rect(40, 0, 1200, 1, Rgb(15, 87, 80));
 }
 
-static void DrawSection(UiPainter &ui, const NuvioState &state)
+static void DrawProfile(UiPainter &ui)
 {
-    ui.Text(54, 128, 2, "HOME  /  SECTION", kMint);
-    ui.Text(54, 175, 5, NuvioScreenName(state.screen), kWhite);
-    ui.Rect(52, 267, 1176, 340, kPanel);
-    ui.Rect(52, 267, 1176, 8, kMint);
-    ui.Rect(90, 309, 150, 150, kPanelLight);
-    ui.Text(130, 348, 10, "N", kMint);
-    ui.Text(282, 331, 3, "THIS SECTION IS COMING SOON", kWhite);
-    ui.Text(282, 400, 2, "THE NUVIO XBOX 360 INTERFACE IS IN DEVELOPMENT", kMuted);
-    ui.Text(282, 441, 2, "NO VIDEO PLAYBACK IS AVAILABLE YET", kGold);
-    ui.Text(90, 544, 2, "PRESS B TO RETURN TO HOME", kMint);
+    DrawBackgroundGlow(ui);
+    DrawBrand(ui, 471, 65, 3);
+    ui.Text(355, 193, 6, "WHO'S WATCHING?", kWhite);
+    ui.Text(439, 265, 3, "SELECT A PROFILE TO CONTINUE", kMuted);
+
+    const int cx = 640;
+    const int cy = 448;
+    ui.Circle(cx, cy, 104, kWhite);
+    ui.Circle(cx, cy, 99, Rgb(2, 55, 59));
+    ui.Circle(cx, cy, 91, Rgb(11, 151, 150));
+    // Simple native avatar: a portrait placeholder until the art pipeline exists.
+    ui.Circle(cx, cy + 87, 79, Rgb(24, 49, 61));
+    ui.Circle(cx, cy - 6, 37, Rgb(227, 156, 109));
+    ui.Circle(cx, cy - 27, 36, Rgb(42, 36, 38));
+    ui.Rect(cx - 37, cy - 18, 74, 30, Rgb(227, 156, 109));
+    ui.Circle(cx - 13, cy - 6, 3, Rgb(24, 27, 31));
+    ui.Circle(cx + 13, cy - 6, 3, Rgb(24, 27, 31));
+    ui.Circle(cx + 77, cy + 76, 23, kGold);
+    ui.Text(cx + 71, cy + 65, 3, "*", kWhite);
+    ui.Text(585, 575, 5, "ADMIN", kWhite);
+    ui.Text(597, 630, 2, "PRIMARY", kGold);
+    ui.Text(466, 683, 2, "PRESS A TO CONTINUE", kMuted);
 }
 
-static void DrawDashboard(IDirect3DDevice9 *device, const NuvioState &state)
+static void DrawSidebar(UiPainter &ui, const NuvioState &state)
+{
+    ui.Rect(0, 0, 96, SCREEN_HEIGHT, kSide);
+    ui.Rect(95, 0, 1, SCREEN_HEIGHT, Rgb(32, 37, 44));
+    const char *icons[5] = { "H", "D", "?", "L", "G" };
+    for (int i = 0; i < 5; ++i) {
+        const int y = 119 + i * 116;
+        const bool active = state.sidebarItem == i;
+        if (active) {
+            ui.Circle(48, y + 20, 31, Rgb(24, 35, 47));
+            ui.Rect(0, y - 12, 5, 65, kBlue);
+        }
+        if (state.sidebarFocused && active) ui.Outline(16, y - 8, 64, 56, 3, kBlue);
+        ui.Text(32, y + 5, 4, icons[i], active ? kBlue : kMuted);
+    }
+    ui.Text(38, 684, 2, "N", kTeal);
+}
+
+static void DrawTopRight(UiPainter &ui, const NuvioCatalog &catalog)
+{
+    ui.Circle(1179, 42, 23, Rgb(20, 84, 92));
+    ui.Text(1168, 31, 3, "A", kWhite);
+    ui.Text(1209, 33, 2, "ADMIN", kWhite);
+    ui.Text(1051, 78, 2, catalog.isDemo ? "DEMO CATALOG" : "IMDB DATA", kMuted);
+}
+
+static void DrawPosterArtwork(UiPainter &ui, int x, int y, int index)
+{
+    // Procedural original abstract poster art. Real poster licensing and image
+    // decoding are separate tasks; no commercial poster assets are embedded.
+    static const int colors[][6] = {
+        {42, 39, 92, 128, 62, 178},
+        {21, 61, 76, 63, 149, 151},
+        {96, 80, 69, 174, 137, 106},
+        {141, 83, 60, 247, 181, 107},
+        {23, 51, 95, 90, 73, 157},
+        {37, 65, 91, 55, 132, 154},
+        {76, 39, 107, 173, 78, 161},
+        {42, 74, 83, 102, 167, 153}
+    };
+    const int *c = colors[index % 8];
+    for (int strip = 0; strip < 34; ++strip) {
+        const int r = c[0] + (c[3] - c[0]) * strip / 34;
+        const int g = c[1] + (c[4] - c[1]) * strip / 34;
+        const int b = c[2] + (c[5] - c[2]) * strip / 34;
+        ui.Rect(x, y + strip * 7, 197, 7, Rgb(r, g, b));
+    }
+    ui.Circle(x + 143, y + 70, 36, Rgb(c[3], c[4], c[5]));
+    // Layered silhouette gives each card a cinematic composition.
+    ui.Rect(x + 14, y + 175, 172, 56, Rgb(c[0] / 2, c[1] / 2, c[2] / 2));
+    ui.Rect(x + 32, y + 147, 18, 67, Rgb(c[0] / 2, c[1] / 2, c[2] / 2));
+    ui.Rect(x + 62, y + 160, 25, 62, Rgb(c[0] / 2, c[1] / 2, c[2] / 2));
+    ui.Rect(x + 114, y + 137, 31, 80, Rgb(c[0] / 2, c[1] / 2, c[2] / 2));
+    ui.Rect(x + 155, y + 161, 20, 57, Rgb(c[0] / 2, c[1] / 2, c[2] / 2));
+    ui.Outline(x, y, 197, 238, 1, Rgb(109, 110, 120));
+}
+
+static void DrawCatalogCard(UiPainter &ui, const NuvioCatalog &catalog,
+                            int catalogIndex, int x, int y, bool selected)
+{
+    if (catalogIndex < 0 || catalogIndex >= catalog.count) return;
+    const NuvioCatalogItem &item = catalog.items[catalogIndex];
+    if (selected) {
+        ui.Rect(x - 4, y - 4, 205, 246, kBlue);
+        ui.Rect(x - 1, y - 1, 199, 240, kBackground);
+    }
+    DrawPosterArtwork(ui, x, y, catalogIndex);
+    // 16 glyphs at 2x fit within the 197 pixel poster width.
+    const int longest = 16;
+    char title[longest + 1];
+    std::strncpy(title, item.title, longest);
+    title[longest] = '\0';
+    ui.Text(x, y + 250, 2, title, kWhite);
+    char year[12];
+    std::sprintf(year, "%d", item.year);
+    ui.Text(x, y + 272, 2, year, kMuted);
+}
+
+static void DrawCatalogScreen(UiPainter &ui, const NuvioState &state,
+                              const NuvioCatalog &catalog)
+{
+    const int firstRow = state.selectedRow > 0 ? state.selectedRow - 1 : 0;
+    for (int visibleRow = 0; visibleRow < 2; ++visibleRow) {
+        const int row = firstRow + visibleRow;
+        if (row >= NuvioCatalogRowCount(&catalog)) break;
+        const int y = 54 + visibleRow * 408;
+        const char *heading = row == 0 ? "FEATURED MOVIES" :
+                              row == 1 ? "FEATURED SERIES" : "MORE TO EXPLORE";
+        ui.Text(138, y, 4, heading, kWhite);
+        ui.Text(140, y + 42, 2, catalog.isDemo ? "FROM DEMO CATALOG" : "FROM IMDB DATASET", kMuted);
+        for (int column = 0; column < 5; ++column) {
+            const int index = NuvioCatalogIndexForRow(&catalog, row, column);
+            if (index < 0) continue;
+            const int x = 139 + column * 220;
+            DrawCatalogCard(ui, catalog, index, x, y + 78,
+                !state.sidebarFocused && state.selectedRow == row &&
+                state.selectedColumn == column);
+        }
+    }
+    DrawTopRight(ui, catalog);
+    ui.Text(1042, 690, 2, "A DETAILS   B PROFILES", kMuted);
+}
+
+static void DrawInfoScreen(UiPainter &ui, const NuvioState &state,
+                           const NuvioCatalog &catalog)
+{
+    ui.Text(145, 81, 5, NuvioScreenName(state.screen), kWhite);
+    ui.Rect(142, 157, 1070, 400, kSurface);
+    if (state.screen == NUVIO_SCREEN_LIBRARY) {
+        ui.Circle(672, 305, 65, Rgb(47, 56, 69));
+        ui.Text(650, 274, 7, "L", kBlue);
+        ui.Text(454, 416, 3, "YOUR LIBRARY IS EMPTY", kWhite);
+        ui.Text(429, 469, 2, "SAVED TITLES WILL APPEAR HERE", kMuted);
+    } else if (state.screen == NUVIO_SCREEN_SETTINGS) {
+        ui.Text(196, 220, 3, "ACTIVE PROFILE", kMuted);
+        ui.Text(196, 270, 4, "ADMIN", kWhite);
+        ui.Text(196, 355, 3, "CATALOG SOURCE", kMuted);
+        ui.Text(196, 410, 3, catalog.isDemo ? "OFFLINE DEMO" : "LOCAL IMDB IMPORT", kWhite);
+        ui.Text(196, 479, 2, "PROFILE EDITING IS PLANNED", kMuted);
+    }
+    ui.Text(151, 629, 2, "PRESS B TO SWITCH PROFILE", kMuted);
+}
+
+static void DrawDetails(UiPainter &ui, const NuvioState &state,
+                        const NuvioCatalog &catalog)
+{
+    if (state.selectedCatalogIndex < 0 || state.selectedCatalogIndex >= catalog.count) return;
+    const NuvioCatalogItem &item = catalog.items[state.selectedCatalogIndex];
+    DrawPosterArtwork(ui, 164, 129, state.selectedCatalogIndex);
+    char titleFirst[23];
+    char titleSecond[23];
+    std::strncpy(titleFirst, item.title, 22);
+    titleFirst[22] = '\0';
+    std::strncpy(titleSecond, item.title + std::strlen(titleFirst), 22);
+    titleSecond[22] = '\0';
+    ui.Text(428, 170, 4, titleFirst, kWhite);
+    if (titleSecond[0]) ui.Text(428, 214, 3, titleSecond, kWhite);
+    ui.Text(428, 238, 3, item.type == 'M' ? "MOVIE" : "SERIES", kBlue);
+    char year[12];
+    std::sprintf(year, "%d", item.year);
+    ui.Text(428, 280, 3, year, kMuted);
+    ui.Text(428, 363, 2, catalog.isDemo ? "DEMONSTRATION ITEM" : "IMDB TITLE METADATA", kMuted);
+    if (!catalog.isDemo) ui.Text(428, 409, 2, item.imdbId, kMuted);
+    ui.Rect(428, 492, 422, 74, kSurface);
+    ui.Text(448, 514, 3, "PLAYBACK COMING LATER", kMuted);
+    ui.Text(174, 617, 2, "B BACK", kBlue);
+}
+
+static void DrawDashboard(IDirect3DDevice9 *device, const NuvioState &state,
+                          const NuvioCatalog &catalog)
 {
     device->Clear(0, NULL, D3DCLEAR_TARGET, kBackground, 1.0f, 0);
     UiPainter ui(device);
-    DrawHeader(ui);
-    if (state.screen == NUVIO_SCREEN_HOME) DrawHome(ui, state);
-    else DrawSection(ui, state);
-    DrawFooter(ui);
+    if (state.screen == NUVIO_SCREEN_PROFILE) {
+        DrawProfile(ui);
+    } else {
+        DrawSidebar(ui, state);
+        if (state.screen == NUVIO_SCREEN_HOME || state.screen == NUVIO_SCREEN_DISCOVER ||
+            state.screen == NUVIO_SCREEN_SEARCH) {
+            DrawCatalogScreen(ui, state, catalog);
+        } else if (state.screen == NUVIO_SCREEN_DETAILS) {
+            DrawDetails(ui, state, catalog);
+        } else {
+            DrawInfoScreen(ui, state, catalog);
+        }
+    }
     ui.Flush();
 }
 
@@ -204,7 +369,15 @@ int main()
 {
     NuvioState app;
     NuvioInitialize(&app);
-    OutputDebugStringA("NUVIO.XEX - dashboard preview started\n");
+    // The catalog is optional: a demo is used until the user imports IMDb TSV.
+    NuvioCatalog catalog;
+    NuvioCatalogLoadDemo(&catalog);
+    const char *paths[] = { "game:\\catalog.tsv", "D:\\catalog.tsv", "catalog.tsv" };
+    for (int pathIndex = 0; pathIndex < 3; ++pathIndex) {
+        if (NuvioCatalogLoadFile(&catalog, paths[pathIndex])) break;
+    }
+    if (!catalog.count) NuvioCatalogLoadDemo(&catalog);
+    OutputDebugStringA("NUVIO.XEX - streaming UI started\n");
 
     IDirect3D9 *graphics = Direct3DCreate9(D3D_SDK_VERSION);
     if (!graphics) return 1;
@@ -240,14 +413,18 @@ int main()
         previousButtons = buttons;
 
         if (pressed & XINPUT_GAMEPAD_BACK) running = false;
-        if (pressed & (XINPUT_GAMEPAD_DPAD_RIGHT | XINPUT_GAMEPAD_DPAD_DOWN))
-            NuvioMoveSelection(&app, 1);
-        if (pressed & (XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_UP))
-            NuvioMoveSelection(&app, -1);
-        if (pressed & XINPUT_GAMEPAD_A) NuvioOpenSelection(&app);
-        if (pressed & XINPUT_GAMEPAD_B) NuvioGoHome(&app);
+        if (pressed & XINPUT_GAMEPAD_DPAD_RIGHT) NuvioMoveHorizontal(&app, 1);
+        if (pressed & XINPUT_GAMEPAD_DPAD_LEFT) NuvioMoveHorizontal(&app, -1);
+        if (pressed & XINPUT_GAMEPAD_DPAD_DOWN)
+            NuvioMoveVertical(&app, 1, NuvioCatalogRowCount(&catalog));
+        if (pressed & XINPUT_GAMEPAD_DPAD_UP)
+            NuvioMoveVertical(&app, -1, NuvioCatalogRowCount(&catalog));
+        if (pressed & XINPUT_GAMEPAD_A)
+            NuvioSelect(&app, NuvioCatalogIndexForRow(&catalog,
+                app.selectedRow, app.selectedColumn));
+        if (pressed & XINPUT_GAMEPAD_B) NuvioBack(&app);
 
-        DrawDashboard(device, app);
+        DrawDashboard(device, app, catalog);
         device->Present(NULL, NULL, NULL, NULL);
         Sleep(16);
     }

@@ -22,20 +22,22 @@ With the XDK integration installed, Visual Studio should offer an **Xbox 360** p
 
 If the project reports that the **Xbox 360 platform is missing**, stop and troubleshoot the XDK installation. Selecting Win32/x64 instead does not fix it.
 
-If the Xbox build reports compiler, API, or linker errors, save the **exact first error message** and the XDK version. The source has now compiled to `.xex` with XDK 21256, but the updated visual dashboard has not yet been confirmed in Xenia or on a real console.
+If the Xbox build reports compiler, API, or linker errors, save the **exact first error message** and the XDK version. The current profile + catalog UI compiled to `.xex` with XDK 21256, but has not yet been confirmed visually in Xenia or on a real console.
 
 ## 4. Local test without the XDK
 
-Only the NUVIO menu-state engine is platform-independent. With G++ or Clang installed, run from the repository root:
+The NUVIO navigation and local metadata catalog are platform-independent. With G++ or Clang installed, run from the repository root:
 
 ```bash
 g++ -std=c++98 -Wall -Wextra -Werror \
   VisualStudio2010/tests/NuvioCoreTests.cpp \
-  VisualStudio2010/src/NuvioApp.cpp -o nuvio_core_tests
-./nuvio_core_tests
+  VisualStudio2010/src/NuvioApp.cpp \
+  VisualStudio2010/src/NuvioCatalog.cpp -o nuvio_core_tests
+./nuvio_core_tests VisualStudio2010/tests/catalog_fixture.tsv
+python -m unittest discover -s tools -p 'test_*.py'
 ```
 
-This test confirms screen-state transitions. It does **not** compile the Xbox executable or test graphics.
+These tests confirm profile navigation, catalog parsing and importer behavior. They do **not** compile the Xbox executable or test graphics.
 
 ## 5. Test with Aurora and publish manually
 
@@ -46,7 +48,9 @@ See [RELEASE_NOTES.md](RELEASE_NOTES.md) for an honest preview warning. No downl
 ## Architecture and licensing
 
 - `VisualStudio2010/src/NuvioApp.*`: SDK-independent C++98 application state.
-- `VisualStudio2010/src/XboxMain.cpp`: Xbox 360-specific controller and graphics smoke test using XDK headers.
+- `VisualStudio2010/src/NuvioCatalog.*`: bounded offline movie/series metadata parser.
+- `VisualStudio2010/src/XboxMain.cpp`: Xbox 360-specific Admin picker, catalog UI and controller using XDK headers.
+- `tools/import_imdb.py`: optional importer for officially downloaded IMDb metadata (not posters or streams).
 - `VisualStudio2010/NUVIO.XEX.vcxproj`: legacy `Xbox 360` build platform, Debug and Release.
 - The original [Nuvio Mobile](https://github.com/NuvioMedia/NuvioMobile) is GPL-3.0 software and a feature reference. No upstream implementation has been copied into this independent starter.
 - Microsoft XDK is proprietary. Use it only under applicable licenses and do not redistribute its files.

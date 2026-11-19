@@ -1,0 +1,6 @@
+tt0000001	movie	2024	A Real Movie
+tt0000002	series	2023	A Real Series
+tt0000003	movie	2022	Another Movie
+# comment lines must be ignored
+tt0000004	series	2021	Another Series
+invalid	movie	2020	Ignored Bad ID

@@ -1,24 +1,34 @@
 #ifndef NUVIO_APP_H
 #define NUVIO_APP_H
 
-// Portable C++98 code. No console SDK or online service is needed here.
+// C++98 state and controller navigation, shared by Xbox 360 and PC tests.
+// Profiles are intentionally local-only. No password or account is created.
 enum NuvioScreen {
-    NUVIO_SCREEN_HOME = 0,
-    NUVIO_SCREEN_MOVIES,
-    NUVIO_SCREEN_SERIES,
+    NUVIO_SCREEN_PROFILE = 0,
+    NUVIO_SCREEN_HOME,
+    NUVIO_SCREEN_DISCOVER,
+    NUVIO_SCREEN_SEARCH,
     NUVIO_SCREEN_LIBRARY,
-    NUVIO_SCREEN_SETTINGS
+    NUVIO_SCREEN_SETTINGS,
+    NUVIO_SCREEN_DETAILS
 };
 
 struct NuvioState {
     NuvioScreen screen;
-    int selectedTile;
+    NuvioScreen previousScreen;
+    int sidebarItem;
+    int selectedRow;
+    int selectedColumn;
+    int selectedCatalogIndex;
+    bool sidebarFocused;
 };
 
 void NuvioInitialize(NuvioState *state);
-void NuvioMoveSelection(NuvioState *state, int direction);
-void NuvioOpenSelection(NuvioState *state);
-void NuvioGoHome(NuvioState *state);
+void NuvioMoveHorizontal(NuvioState *state, int direction);
+void NuvioMoveVertical(NuvioState *state, int direction, int rowCount);
+void NuvioSelect(NuvioState *state, int catalogIndex);
+void NuvioBack(NuvioState *state);
+void NuvioOpenScreen(NuvioState *state, NuvioScreen screen);
 const char *NuvioScreenName(NuvioScreen screen);
 
 #endif

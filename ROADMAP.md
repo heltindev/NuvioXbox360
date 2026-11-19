@@ -13,10 +13,11 @@ This checklist separates **source code written** from **hardware-tested features
 
 ## Phase 2 — First real Xbox 360 build
 
-- [ ] Verify Visual C++ and an appropriately licensed Xbox 360 XDK are installed
-- [ ] Open the solution with the `Xbox 360` build platform available
+- [x] Verify Visual C++ and Xbox 360 XDK 21256 build tools on the maintainer's PC
+- [x] Build the project with the `Xbox 360` platform available
 - [x] Compile the initial `NUVIO.XEX.xex` successfully in Visual Studio 2010 (XDK 21256)
-- [ ] Compile and display the updated dashboard preview in Xenia
+- [x] Compile the new profile and streaming-style UI with XDK 21256 (PC build only)
+- [ ] Confirm the updated streaming-style screen in Xenia
 - [ ] Run the executable from Aurora on a real RGH/JTAG Xbox 360
 - [ ] Confirm the 720p screen displays correctly
 - [ ] Confirm controller navigation and clean exit
@@ -24,17 +25,21 @@ This checklist separates **source code written** from **hardware-tested features
 
 ## Phase 3 — Nuvio interface
 
-- [x] Add visible NUVIO bitmap text and a header bar (source implemented)
-- [x] Add four controller-friendly colored menu cards (source implemented)
-- [ ] Verify the on-screen dashboard and selection highlights in Xenia
-- [ ] Support poster artwork and details panels
-- [ ] Build Movies, Series, My Library and Settings screens
-- [ ] Add search and browse navigation
+- [x] Add an Admin-only profile selector and Nuvio-inspired dark gradient
+- [x] Add a vertical sidebar, selectable catalog rows, and details screen
+- [x] Add fictional procedural poster placeholders (not genuine posters)
+- [x] Add empty library and basic settings screens
+- [x] Add catalog browsing by controller (text search is still planned)
+- [ ] Add actual licensed poster artwork and better text rendering
+- [ ] Add create/edit/delete profile actions and local profile persistence
+- [ ] Implement proper keyboard-driven search and rich title details
 - [ ] Cache textures safely within console memory limits
 
 ## Phase 4 — Nuvio features
 
-- [ ] Design a source-independent media catalog API
+- [x] Design a bounded local C++98 catalog with a TSV parser
+- [x] Add a PC-only importer for official IMDb noncommercial metadata datasets
+- [ ] Add pagination for the full IMDb-scale dataset (current preview: 240 entries)
 - [ ] Add metadata, descriptions, genres and seasons/episodes
 - [ ] Implement a native Xbox 360 video/audio playback pipeline
 - [ ] Add buffering, pause/resume, seeking and subtitles
@@ -49,4 +54,4 @@ This checklist separates **source code written** from **hardware-tested features
 - [ ] Include a beginner-friendly installation guide with each manual Release
 - [ ] Review licensing if any original Nuvio GPL-covered code is ever ported
 
-**Current stage:** Foundation complete as source files. The Xbox 360 `.xex` build and real hardware tests remain unverified.
+**Current stage:** Admin chooser, streaming-style UI, navigation and offline IMDb metadata import. The `.xex` compiled with the maintainer's Xbox 360 XDK 21256 on Windows; Xenia visual verification and real hardware tests remain pending. **No streaming playback yet.**

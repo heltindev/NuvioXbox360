@@ -12,12 +12,18 @@
     <ClCompile Include="src\NuvioApp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\NuvioCatalog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\XboxMain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\NuvioApp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\NuvioCatalog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -69,9 +69,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="src\NuvioApp.h" />
+    <ClInclude Include="src\NuvioCatalog.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\NuvioApp.cpp" />
+    <ClCompile Include="src\NuvioCatalog.cpp" />
     <ClCompile Include="src\XboxMain.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
