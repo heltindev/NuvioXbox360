@@ -9,7 +9,7 @@
   ![Stage](https://img.shields.io/badge/Stage-Early%20preview-8973ea)
   ![Language](https://img.shields.io/badge/Language-English-4b9bff)
 
-  **[📥 DOWNLOAD FROM RELEASES](https://github.com/heltindev/NuvioXbox360/releases)** · **[📋 ROADMAP](ROADMAP.md)** · **[❓ HELP](docs/DEVELOPMENT.md)**
+  **[📥 DOWNLOAD FROM RELEASES](https://github.com/heltindev/NuvioXbox360/releases)** · **[📋 ROADMAP](ROADMAP.md)** · **[❓ INSTALL HELP](INSTALL-ON-XBOX.txt)**
 </div>
 
 ---

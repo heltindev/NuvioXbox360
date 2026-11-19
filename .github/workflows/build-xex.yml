@@ -33,7 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validar-codigo:
+  check-source:
     name: '✅ 1. Check the source code'
     runs-on: ubuntu-24.04
     steps:
@@ -46,9 +46,9 @@ jobs:
             -lm -o test_stremio
           ./test_stremio
 
-  compilar-xex:
+  build-xex:
     name: '🎮 2. Build the Xbox 360 app'
-    needs: validar-codigo
+    needs: check-source
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
@@ -206,7 +206,7 @@ jobs:
 
   publish-release:
     name: '🚀 3. Publish the preview Release'
-    needs: compilar-xex
+    needs: build-xex
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
     runs-on: ubuntu-24.04
     permissions:
