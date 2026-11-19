@@ -1,0 +1,117 @@
+name: Build NUVIO.XEX
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'third_party/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - 'addon_url.txt'
+      - 'stream_addons.txt'
+      - '.github/workflows/build-xex.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validar-codigo:
+    name: '1. Testar codigo no Linux'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Baixar codigo-fonte
+        uses: actions/checkout@v4
+      - name: Verificar catalogos e fontes
+        run: |
+          gcc -std=c17 -Wall -Wextra -Werror -Isrc -Ithird_party/cjson \
+            tests/test_stremio.c src/stremio.c third_party/cjson/cJSON.c \
+            -lm -o test_stremio
+          ./test_stremio
+
+  compilar-xex:
+    name: '2. Compilar Xbox 360 PowerPC'
+    needs: validar-codigo
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      XSDK_ROOT: ${{ github.workspace }}/deps/xsdk
+      TOOLCHAIN_ROOT: ${{ github.workspace }}/.toolchain
+      BUILD_JOBS: '2'
+    steps:
+      - name: Baixar NUVIO.XEX
+        uses: actions/checkout@v4
+
+      - name: Instalar ferramentas no Linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bison flex texinfo libgmp-dev \
+            libmpfr-dev libmpc-dev curl xz-utils patch python3 cmake ninja-build git
+
+      - name: Buscar SDK e bibliotecas abertas
+        run: |
+          mkdir -p deps
+          git clone https://github.com/xenosworks/xsdk.git deps/xsdk
+          git -C deps/xsdk checkout --detach 9e6de98f6b5d737bce0fecd2864edae94bdd2637
+          git clone --branch xenon https://github.com/xenosworks/curl-xenon.git deps/curl-xenon
+          git -C deps/curl-xenon checkout --detach a6b70bd06820e1c625f47fe0e592e08c5daaa6b4
+          git clone --branch xenon https://github.com/xenosworks/mbedtls-xenon.git deps/mbedtls-xenon
+          git -C deps/mbedtls-xenon checkout --detach 591b04adbec4bc5582649601f4407506a610162b
+          git clone --branch xenon https://github.com/xenosworks/glslang-xenon.git deps/glslang-xenon
+          git -C deps/glslang-xenon checkout --detach d2f00185cf5feaa449f6e15c1894fb232b2b6bcd
+
+      - name: Recuperar compilador do cache (se existir)
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: .toolchain
+          key: xsdk-gcc-15.3-x64-v1
+
+      - name: Criar compilador PowerPC do Xbox 360
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          PREFIX="$TOOLCHAIN_ROOT" \
+            WORK="$RUNNER_TEMP/xsdk-toolchain-work" \
+            JOBS="$BUILD_JOBS" \
+            deps/xsdk/tools/toolchain/build.sh
+
+      - name: Preparar compilador de shaders
+        run: |
+          (cd deps/glslang-xenon && python3 update_glslang_sources.py)
+          cmake -S deps/glslang-xenon -B deps/glslang-xenon/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DENABLE_OPT=ON \
+            -DSPIRV_SKIP_EXECUTABLES=ON -DGLSLANG_TESTS=OFF
+          cmake --build deps/glslang-xenon/build --parallel "$BUILD_JOBS"
+          cp deps/glslang-xenon/build/StandAlone/glslang "$TOOLCHAIN_ROOT/bin/glslang"
+
+      - name: Compilar o xsdk
+        run: |
+          make -C "$XSDK_ROOT" -j "$BUILD_JOBS" \
+            TOOLCHAIN="$TOOLCHAIN_ROOT/bin/powerpc-xsdk-elf-"
+
+      - name: Gerar NUVIO.xex
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$XSDK_ROOT/cmake/xsdk.cmake" \
+            -DXSDK_TOOLCHAIN="$TOOLCHAIN_ROOT" \
+            -DMBEDTLS_XENON_DIR="$GITHUB_WORKSPACE/deps/mbedtls-xenon" \
+            -DCURL_XENON_DIR="$GITHUB_WORKSPACE/deps/curl-xenon" \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel "$BUILD_JOBS"
+          test -s build/NUVIO.xex
+
+      - name: Preparar arquivos para testar no Aurora
+        run: |
+          mkdir -p dist
+          cp build/NUVIO.xex dist/NUVIO.XEX
+          cp build/cacert.pem dist/cacert.pem
+          cp addon_url.txt stream_addons.txt INSTALAR-NO-XBOX.txt dist/
+
+      - name: Disponibilizar download do NUVIO.XEX
+        uses: actions/upload-artifact@v4
+        with:
+          name: NUVIO-XEX-test
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
