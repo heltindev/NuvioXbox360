@@ -11,17 +11,17 @@ This checklist tracks **implemented code**, **verified behavior**, and **missing
 - [x] Parse HTTP URLs, magnet links, `infoHash`, and `fileIdx`
 - [x] Local tests of JSON parsing and URL construction
 - [x] English-language repository, documentation, and on-screen text
-- [x] GitHub Actions build recipe and release preparation
+- [x] Beginner-friendly installation and local build documentation
 
 ## Phase 2 — Build and hardware verification
 
-- [ ] Complete the PowerPC compiler build on GitHub Actions
+- [ ] Set up and verify the PowerPC toolchain on the maintainer's PC
 - [ ] Generate `NUVIO.XEX` and an installable ZIP
 - [ ] Confirm the executable loads in **Aurora on a real Xbox 360 RGH**
 - [ ] Test controller navigation and 720p display output
 - [ ] Confirm certificate-verified HTTPS on real hardware
 - [ ] Test Cinemeta and addon responses on real hardware
-- [ ] Publish the first **clearly labeled preview Release** after successful compilation
+- [ ] Manually publish the first **clearly labeled preview Release** after successful local compilation
 - [ ] Investigate crashes, memory consumption, and rendering performance
 
 ## Phase 3 — Actual playback

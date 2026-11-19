@@ -43,7 +43,7 @@ The original Nuvio is built with Kotlin Multiplatform for modern devices. Xbox 3
 2. Choose the latest available release. Read the warning and feature list.
 3. Under **Assets**, download the `NUVIO-XEX-Preview.zip` file, if one is available.
 
-**No ZIP means no release has passed the build checks yet.** Please do not download random `.xex` files from third-party sites.
+**No ZIP means the maintainer has not published a tested download yet.** Please do not download random `.xex` files from third-party sites.
 </details>
 
 <details>
@@ -90,7 +90,7 @@ The development plan is in **[ROADMAP.md](ROADMAP.md)**. Our biggest milestones 
 | `catalog_manifest.txt` | Default catalog manifest (Cinemeta) |
 | `stream_addons.txt` | Configurable stream addon manifests |
 | `tests/` | Local parser tests |
-| `docs/DEVELOPMENT.md` | Developer/build instructions |
+| `docs/DEVELOPMENT.md` | How to build on your PC and publish a Release |
 | `docs/PORTING.md` | Nuvio feature-by-feature porting plan |
 
 ## 🤝 Credits, licenses, and safety
@@ -101,4 +101,4 @@ The development plan is in **[ROADMAP.md](ROADMAP.md)**. Our biggest milestones 
 - External build dependencies keep their own licenses.
 - Use only media sources you are authorized to access. Streaming addons do not grant distribution rights.
 
-> **Are you a maintainer?** See [Developer documentation](docs/DEVELOPMENT.md) for build automation and manual release instructions. Visitors should use **Releases** for downloads.
+> **Are you a maintainer?** Build on your own PC with the [local development guide](docs/DEVELOPMENT.md). Users should download published builds only from **Releases**.
