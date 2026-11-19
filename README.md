@@ -36,6 +36,12 @@
 
 Se ficar **vermelho ❌**, abra a etapa que falhou para ver o erro. A compilação automatizada ainda precisa ser validada; não significa que exista um `.XEX` pronto para instalar.
 
+### ⚡ Por que a primeira compilação demora mais?
+
+O Xbox 360 exige um compilador PowerPC especial. Como não encontramos uma distribuição pré-compilada oficial do xsdk, o GitHub precisa construir esse compilador na primeira execução. **Depois que o compilador e as ferramentas gráficas forem criados, o Actions salva cada um no cache**, para acelerar as próximas tentativas, mesmo que o aplicativo ainda precise de correções.
+
+Na tela do Actions, as etapas aparecem com nomes em português e emojis. Se algo falhar, consulte o resumo **“O NUVIO.XEX ainda não ficou pronto”** no final da execução.
+
 ## 🕹️ Como testar no Xbox 360 RGH com Aurora
 
 1. Prepare um pendrive FAT32 ou utilize o gerenciador de arquivos do Aurora.
