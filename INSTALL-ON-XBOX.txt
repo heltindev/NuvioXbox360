@@ -1,16 +1,18 @@
-NUVIO.XEX - HOW TO TEST ON XBOX 360 RGH WITH AURORA
+NUVIO.XEX - EARLY XBOX 360 RGH/JTAG TEST
 
-WARNING: This is an early technical preview. It does NOT play videos or
-download torrents yet. Use it only to test the interface and addons.
+IMPORTANT: This is currently a minimal console test project.
+There is NO video playback, internet catalog, or streaming functionality.
 
-1) Extract the ZIP to a folder on a FAT32 USB drive.
-2) Keep NUVIO.XEX, cacert.pem, catalog_manifest.txt and stream_addons.txt
-   TOGETHER in the same folder.
-3) On your RGH Xbox 360, open Aurora > File Manager.
-4) Find the USB folder and launch NUVIO.XEX.
-5) Use D-pad to navigate, A to select, B to go back, Y to refresh,
-   and the Back button to exit the app.
-6) If the app does not start, share the error on the GitHub Issues page.
+After you have successfully compiled the Visual Studio 2010 project:
 
-An internet connection and an accurate console clock are required for HTTPS.
-You do not need to keep a PC powered on to launch this preview.
+1. Locate the generated NUVIO.xex under VisualStudio2010/bin/Debug/
+   (or bin/Release/ for the release configuration).
+2. Copy the .xex file into a folder on a FAT32 USB drive.
+3. Open Aurora > File Manager on your Xbox 360 RGH/JTAG.
+4. Browse to the USB folder and launch NUVIO.xex.
+5. The test screen should show a dark background if initialization works.
+6. Use the D-pad to change selection, A to open a section,
+   B to return home, and the Back button to exit.
+
+WARNING: Console compatibility has NOT been verified. Do not publish a
+public downloadable build until the Xbox 360 test succeeds.

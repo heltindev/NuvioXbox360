@@ -1,33 +1,22 @@
-# 🎮 NUVIO.XEX — Technical Preview
+# 🎮 NUVIO.XEX — Foundation Preview
 
-Thank you for helping test NUVIO.XEX, an unofficial native Nuvio-inspired app for Xbox 360 RGH/JTAG.
+NUVIO.XEX is an independent, unofficial Nuvio-inspired homebrew project for Xbox 360 RGH/JTAG.
 
-## ⚠️ Read this first
+## ⚠️ Early prototype
 
-**This is an early development build, not a working streaming player.** The current preview may show catalogs and stream source information, but it does not yet download torrents or play video/audio.
+This release is intended **only for developers testing their own Xbox 360 hardware**. It has a tiny application-state engine and a Direct3D/controller test. It does **not** browse movie catalogs or play audio/video.
 
-## ✅ What's included
+## Included in the source
 
-- Dark, 720p interface designed around the Xbox 360 controller.
-- Stremio-style catalog navigation powered by Cinemeta.
-- Stream source discovery using the configured Torrentio and Brazuca manifests.
-- Detection of HTTP stream links, magnet links, torrent hashes, and file indices.
-- A native Xbox 360 `.XEX` build for RGH/JTAG devices, subject to real-hardware verification.
+- Visual Studio 2010 `.sln` and `.vcxproj` for an Xbox 360 XDK toolset.
+- Portable Nuvio navigation model (Home, Movies, Series, My Library and Settings).
+- Xbox controller input and solid-color 720p graphics smoke test.
+- A locally runnable navigation test and installation instructions.
 
-## 📥 Installation
+## Test instructions
 
-1. Under **Assets**, download `NUVIO-XEX-Preview.zip`.
-2. Extract it to a FAT32 USB drive.
-3. Keep all files together in the same folder.
-4. Launch `NUVIO.XEX` using Aurora's File Manager.
-5. Read `INSTALL-ON-XBOX.txt` for help and controller buttons.
+After a successful build **with a licensed Xbox 360 XDK**, place `NUVIO.xex` on a USB drive, open it in Aurora and test the screen and buttons. If the executable fails to start, keep the build logs and record the XDK version and console model.
 
-## 🐞 Found a bug?
+**Do not publish an `.xex` release until it actually compiles and hardware tests have been performed.**
 
-Open an issue on this repository with your Xbox 360 motherboard model, Aurora version, and the exact error or screenshot. Please don't post credentials or personal account tokens.
-
-## 🔜 Coming next
-
-Real video/audio playback, BitTorrent or authorized direct HTTP transport, series episodes, posters, subtitles, and local watch progress are on the [roadmap](https://github.com/heltindev/NuvioXbox360/blob/main/ROADMAP.md).
-
-**Project status:** Experimental, not affiliated with NuvioMedia or Microsoft. Use only legal and authorized content sources.
+Read [ROADMAP.md](https://github.com/heltindev/NuvioXbox360/blob/main/ROADMAP.md) for future features.

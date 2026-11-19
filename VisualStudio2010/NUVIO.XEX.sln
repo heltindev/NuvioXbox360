@@ -1,0 +1,19 @@
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "NUVIO.XEX", "NUVIO.XEX.vcxproj", "{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Xbox 360 = Debug|Xbox 360
+		Release|Xbox 360 = Release|Xbox 360
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}.Debug|Xbox 360.ActiveCfg = Debug|Xbox 360
+		{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}.Debug|Xbox 360.Build.0 = Debug|Xbox 360
+		{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}.Release|Xbox 360.ActiveCfg = Release|Xbox 360
+		{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}.Release|Xbox 360.Build.0 = Release|Xbox 360
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
