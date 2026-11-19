@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="355" viewBox="0 0 1200 355" role="img" aria-labelledby="title desc">
   <title id="title">NUVIO.XEX</title>
-  <desc id="desc">Banner azul escuro com verde e lilás para o projeto experimental de Xbox 360</desc>
+  <desc id="desc">Dark blue Xbox 360 technical-preview banner with mint and violet accents</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#091122"/><stop offset=".6" stop-color="#142348"/><stop offset="1" stop-color="#211c48"/></linearGradient>
     <linearGradient id="orb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67eac8"/><stop offset="1" stop-color="#9074fb"/></linearGradient>
@@ -15,8 +15,8 @@
     <path d="M70 55 L123 87 L70 119 Z" fill="#d5fff4"/>
   </g>
   <text x="302" y="161" font-family="Arial, Helvetica, sans-serif" font-size="89" font-weight="800" letter-spacing="4" fill="#f3f9ff">NUVIO<tspan fill="#6ce9c9">.XEX</tspan></text>
-  <text x="309" y="213" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="500" letter-spacing="2.5" fill="#aebee1">HOME BREW MEDIA · XBOX 360 RGH</text>
+  <text x="309" y="213" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="500" letter-spacing="2.5" fill="#aebee1">HOMEBREW MEDIA · XBOX 360 RGH</text>
   <rect x="307" y="249" width="274" height="46" rx="23" fill="#244e5a" stroke="#56d4bb" stroke-opacity=".55"/>
-  <text x="332" y="279" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2" fill="#baffed">VERSÃO EXPERIMENTAL</text>
+  <text x="332" y="279" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2" fill="#baffed">EARLY TECH PREVIEW</text>
   <g stroke="#6be1ca" stroke-width="2" fill="none" opacity=".5"><path d="M995 66 L1080 149 L995 235 L907 149 Z"/><circle cx="995" cy="149" r="58"/></g>
 </svg>

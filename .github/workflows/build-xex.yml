@@ -1,8 +1,19 @@
-name: '🎮 Compilar NUVIO.XEX'
-run-name: '🎮 NUVIO.XEX — tentativa #${{ github.run_number }}'
+name: '🎮 Build NUVIO.XEX'
+run-name: '🎮 NUVIO.XEX — build #${{ github.run_number }}'
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish a preview Release after a successful build?'
+        type: boolean
+        required: true
+        default: false
+      version:
+        description: 'Release version (example: v0.3.0-alpha.1)'
+        type: string
+        required: true
+        default: 'v0.3.0-alpha.1'
   push:
     branches: [main]
     paths:
@@ -10,7 +21,7 @@ on:
       - 'third_party/**'
       - 'tests/**'
       - 'CMakeLists.txt'
-      - 'addon_url.txt'
+      - 'catalog_manifest.txt'
       - 'stream_addons.txt'
       - '.github/workflows/build-xex.yml'
 
@@ -23,12 +34,12 @@ concurrency:
 
 jobs:
   validar-codigo:
-    name: '✅ 1. Verificar o codigo'
+    name: '✅ 1. Check the source code'
     runs-on: ubuntu-24.04
     steps:
-      - name: '📥 Baixar o projeto'
+      - name: '📥 Download the project'
         uses: actions/checkout@v4
-      - name: '🧪 Verificar catálogos e complementos'
+      - name: '🧪 Test catalog and addon parsing'
         run: |
           gcc -std=c17 -Wall -Wextra -Werror -Isrc -Ithird_party/cjson \
             tests/test_stremio.c src/stremio.c third_party/cjson/cJSON.c \
@@ -36,7 +47,7 @@ jobs:
           ./test_stremio
 
   compilar-xex:
-    name: '🎮 2. Criar o aplicativo para Xbox 360'
+    name: '🎮 2. Build the Xbox 360 app'
     needs: validar-codigo
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -45,10 +56,10 @@ jobs:
       TOOLCHAIN_ROOT: ${{ github.workspace }}/.toolchain
       BUILD_JOBS: '3'
     steps:
-      - name: '📥 Baixar os arquivos do projeto'
+      - name: '📥 Download project files'
         uses: actions/checkout@v4
 
-      - name: '📦 Baixar bibliotecas oficiais (versoes fixas)'
+      - name: '📦 Download pinned open-source dependencies'
         run: |
           mkdir -p deps
           clone_fixed() {
@@ -63,14 +74,14 @@ jobs:
           clone_fixed https://github.com/xenosworks/mbedtls-xenon.git xenon deps/mbedtls-xenon 591b04adbec4bc5582649601f4407506a610162b
           clone_fixed https://github.com/xenosworks/glslang-xenon.git xenon deps/glslang-xenon d2f00185cf5feaa449f6e15c1894fb232b2b6bcd
 
-      - name: '⚡ Procurar compilador ja pronto no cache'
+      - name: '⚡ Look for a cached PowerPC compiler'
         id: cache-compiler
         uses: actions/cache/restore@v4
         with:
           path: .toolchain
           key: xsdk-gcc-15.3-9e6de98-v2
 
-      - name: '🛠️ Instalar ferramentas (somente quando necessario)'
+      - name: '🛠️ Install tools (first build only)'
         if: steps.cache-compiler.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
@@ -78,7 +89,7 @@ jobs:
             build-essential bison flex texinfo libgmp-dev libmpfr-dev \
             libmpc-dev curl xz-utils patch python3 cmake ninja-build git
 
-      - name: '🏗️ Criar compilador PowerPC (primeira compilacao)'
+      - name: '🏗️ Build PowerPC compiler (first build only)'
         if: steps.cache-compiler.outputs.cache-hit != 'true'
         run: |
           PREFIX="$TOOLCHAIN_ROOT" \
@@ -87,21 +98,21 @@ jobs:
             bash deps/xsdk/tools/toolchain/build.sh
           test -x "$TOOLCHAIN_ROOT/bin/powerpc-xsdk-elf-gcc"
 
-      - name: '💾 Guardar compilador para proximas vezes'
+      - name: '💾 Cache compiler for future builds'
         if: steps.cache-compiler.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: .toolchain
           key: xsdk-gcc-15.3-9e6de98-v2
 
-      - name: '⚡ Procurar shaders ja prontos no cache'
+      - name: '⚡ Look for cached graphics tools'
         id: cache-shaders
         uses: actions/cache/restore@v4
         with:
           path: .shader-cache
           key: glslang-xenon-d2f00185-v1
 
-      - name: '🎨 Preparar graficos (somente sem cache)'
+      - name: '🎨 Build graphics tools (if not cached)'
         if: steps.cache-shaders.outputs.cache-hit != 'true'
         run: |
           (cd deps/glslang-xenon && python3 update_glslang_sources.py)
@@ -112,24 +123,24 @@ jobs:
           mkdir -p .shader-cache
           cp deps/glslang-xenon/build/StandAlone/glslang .shader-cache/glslang
 
-      - name: '💾 Guardar shaders para proximas vezes'
+      - name: '💾 Cache graphics tools for future builds'
         if: steps.cache-shaders.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: .shader-cache
           key: glslang-xenon-d2f00185-v1
 
-      - name: '🖼️ Ativar ferramentas graficas'
+      - name: '🖼️ Enable graphics tools'
         run: |
           cp .shader-cache/glslang "$TOOLCHAIN_ROOT/bin/glslang"
           test -s "$TOOLCHAIN_ROOT/bin/glslang"
 
-      - name: '⚙️ Preparar recursos do Xbox 360'
+      - name: '⚙️ Build the Xbox 360 SDK'
         run: |
           make -C "$XSDK_ROOT" -j "$BUILD_JOBS" \
             TOOLCHAIN="$TOOLCHAIN_ROOT/bin/powerpc-xsdk-elf-"
 
-      - name: '🎮 Gerar o arquivo NUVIO.xex'
+      - name: '🎮 Compile NUVIO.xex'
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$XSDK_ROOT/cmake/xsdk.cmake" \
@@ -140,14 +151,20 @@ jobs:
           cmake --build build --parallel "$BUILD_JOBS"
           test -s build/NUVIO.xex
 
-      - name: '📁 Organizar arquivos para o Aurora'
+      - name: '📁 Prepare files for Aurora'
         run: |
           mkdir -p dist
           cp build/NUVIO.xex dist/NUVIO.XEX
           cp build/cacert.pem dist/cacert.pem
-          cp addon_url.txt stream_addons.txt INSTALAR-NO-XBOX.txt dist/
+          cp catalog_manifest.txt stream_addons.txt INSTALL-ON-XBOX.txt dist/
+          (
+            cd dist
+            zip -q -9 NUVIO-XEX-Preview.zip NUVIO.XEX cacert.pem \
+              catalog_manifest.txt stream_addons.txt INSTALL-ON-XBOX.txt
+          )
+          (cd dist && sha256sum NUVIO-XEX-Preview.zip > SHA256SUMS.txt)
 
-      - name: '📥 Disponibilizar o download do NUVIO.XEX'
+      - name: '📥 Save the build package for maintainers'
         uses: actions/upload-artifact@v4
         with:
           name: NUVIO-XEX-test
@@ -155,34 +172,88 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: '✅ Explicar onde baixar o arquivo'
+      - name: '✅ Explain where to find the test build'
         if: success()
         run: |
           {
-            echo '## 🎮 NUVIO.XEX compilado!'
+            echo '## 🎮 NUVIO.XEX build succeeded!'
             echo ''
-            echo '✅ O teste de compilacao terminou com sucesso.'
+            echo '✅ The compilation steps completed successfully.'
             echo ''
-            echo '### 📥 Como baixar'
-            echo '1. Volte para a pagina desta execucao no GitHub.'
-            echo '2. Role ate **Artifacts** (Arquivos gerados).'
-            echo '3. Baixe **NUVIO-XEX-test**.'
-            echo '4. Descompacte os arquivos e siga **INSTALAR-NO-XBOX.txt**.'
+            echo '### 📥 Maintainer download'
+            echo '1. Return to this GitHub Actions run.'
+            echo '2. Scroll down to **Artifacts**.'
+            echo '3. Download **NUVIO-XEX-test**.'
+            echo '4. Open the ZIP and read **INSTALL-ON-XBOX.txt**.'
             echo ''
-            echo '> ⚠️ O video e o cliente torrent ainda estao em desenvolvimento. Compilar nao garante funcionamento no Xbox real.'
+            echo '> ⚠️ Video playback and BitTorrent are still in development. Compilation does not guarantee hardware compatibility.'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: '💡 Explicar como identificar um erro'
+      - name: '💡 Explain how to troubleshoot a failure'
         if: failure()
         run: |
           {
-            echo '## ⚠️ O NUVIO.XEX ainda nao ficou pronto'
+            echo '## ⚠️ NUVIO.XEX is not ready yet'
             echo ''
-            echo 'A compilacao encontrou um erro. **Nao existe download valido nesta tentativa.**'
+            echo 'This build failed. **There is no verified download from this run.**'
             echo ''
-            echo '1. Abra a etapa com o simbolo vermelho ❌.'
-            echo '2. Copie as ultimas linhas do erro.'
-            echo '3. Envie essas linhas no ChatGPT para corrigirmos.'
+            echo '1. Open the failed step marked with ❌.'
+            echo '2. Copy the last lines of the error.'
+            echo '3. Share them with the maintainer for troubleshooting.'
             echo ''
-            echo 'ℹ️ Na primeira compilacao, o GitHub precisa montar o compilador PowerPC. Depois disso o cache acelera as proximas tentativas.'
+            echo 'ℹ️ The first build creates the PowerPC compiler. Cached tools speed up later builds.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-release:
+    name: '🚀 3. Publish the preview Release'
+    needs: compilar-xex
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: '📥 Download release notes'
+        uses: actions/checkout@v4
+
+      - name: '📦 Download successfully built files'
+        uses: actions/download-artifact@v4
+        with:
+          name: NUVIO-XEX-test
+          path: release-assets
+
+      - name: '🔎 Check version and archive'
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          if ! [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo 'Invalid version. Example: v0.3.0-alpha.1'
+            exit 1
+          fi
+          test -s release-assets/NUVIO-XEX-Preview.zip
+          test -s release-assets/SHA256SUMS.txt
+          (cd release-assets && sha256sum --check SHA256SUMS.txt)
+
+      - name: '🎉 Make the download available in Releases'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "$RELEASE_VERSION" \
+            release-assets/NUVIO-XEX-Preview.zip \
+            release-assets/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" \
+            --title "NUVIO.XEX $RELEASE_VERSION — Technical Preview" \
+            --notes-file docs/RELEASE_NOTES.md \
+            --prerelease
+
+      - name: '✅ Explain where users download the app'
+        run: |
+          {
+            echo '## 🎉 Release published!'
+            echo ''
+            echo 'Users can download the preview from the **Releases** page.'
+            echo ''
+            echo "📥 https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_VERSION"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}

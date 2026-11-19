@@ -1,0 +1,16 @@
+NUVIO.XEX - HOW TO TEST ON XBOX 360 RGH WITH AURORA
+
+WARNING: This is an early technical preview. It does NOT play videos or
+download torrents yet. Use it only to test the interface and addons.
+
+1) Extract the ZIP to a folder on a FAT32 USB drive.
+2) Keep NUVIO.XEX, cacert.pem, catalog_manifest.txt and stream_addons.txt
+   TOGETHER in the same folder.
+3) On your RGH Xbox 360, open Aurora > File Manager.
+4) Find the USB folder and launch NUVIO.XEX.
+5) Use D-pad to navigate, A to select, B to go back, Y to refresh,
+   and the Back button to exit the app.
+6) If the app does not start, share the error on the GitHub Issues page.
+
+An internet connection and an accurate console clock are required for HTTPS.
+You do not need to keep a PC powered on to launch this preview.

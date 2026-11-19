@@ -7,10 +7,10 @@ int main(void)
 {
     XsManifest manifest;
     const char *manifest_json =
-        "{\"name\":\"Teste Cinema\",\"catalogs\":[{\"type\":\"other\",\"id\":\"ignored\"},"
+        "{\"name\":\"Cinema Test\",\"catalogs\":[{\"type\":\"other\",\"id\":\"ignored\"},"
         "{\"type\":\"movie\",\"id\":\"top\"}]}";
     assert(xs_manifest_parse(manifest_json, "https://example.org/api/manifest.json", &manifest));
-    assert(!strcmp(manifest.addon_name, "Teste Cinema"));
+    assert(!strcmp(manifest.addon_name, "Cinema Test"));
     assert(!strcmp(manifest.base_url, "https://example.org/api"));
     assert(!strcmp(manifest.catalog_id, "top"));
     assert(!xs_manifest_parse("{}", "https://example.org/manifest.json", &manifest));
@@ -33,11 +33,11 @@ int main(void)
 
     XsItem items[XS_MAX_ITEMS];
     const char *catalog_json = "{\"metas\":["
-        "{\"id\":\"tt123\",\"name\":\"Filme um\",\"type\":\"movie\"},"
-        "{\"id\":\"tt456\",\"name\":\"Filme dois\",\"type\":\"movie\"},"
-        "{\"id\":\"x/y\",\"name\":\"Invalido\",\"type\":\"movie\"}]}";
+        "{\"id\":\"tt123\",\"name\":\"Movie one\",\"type\":\"movie\"},"
+        "{\"id\":\"tt456\",\"name\":\"Movie two\",\"type\":\"movie\"},"
+        "{\"id\":\"x/y\",\"name\":\"Invalid\",\"type\":\"movie\"}]}";
     assert(xs_catalog_parse(catalog_json, items, XS_MAX_ITEMS) == 2);
-    assert(!strcmp(items[0].title, "Filme um"));
+    assert(!strcmp(items[0].title, "Movie one"));
     const char *cinemeta_json = "{\"metas\":[{\"imdb_id\":\"tt789\",\"name\":\"Cinemeta\",\"type\":\"movie\"}]}";
     assert(xs_catalog_parse(cinemeta_json, items, XS_MAX_ITEMS) == 1);
     assert(!strcmp(items[0].id, "tt789"));
@@ -46,16 +46,16 @@ int main(void)
 
     XsStream streams[XS_MAX_STREAMS];
     const char *stream_json = "{\"streams\":["
-        "{\"title\":\"Video direto\",\"url\":\"https://media.example.org/video.mp4\"},"
+        "{\"title\":\"Direct video\",\"url\":\"https://media.example.org/video.mp4\"},"
         "{\"title\":\"Torrent\",\"infoHash\":\"abcdef0123456789\",\"fileIdx\":2},"
-        "{\"name\":\"Outro stream\",\"url\":\"http://media.example.org/clip.mp4\"},"
+        "{\"name\":\"Another stream\",\"url\":\"http://media.example.org/clip.mp4\"},"
         "{\"url\":\"file:///etc/passwd\"}]}";
     assert(xs_stream_parse(stream_json, streams, XS_MAX_STREAMS) == 3);
-    assert(!strcmp(streams[0].title, "Video direto"));
+    assert(!strcmp(streams[0].title, "Direct video"));
     assert(streams[1].is_torrent);
     assert(!strcmp(streams[1].info_hash, "abcdef0123456789"));
     assert(streams[1].file_index == 2);
-    assert(!strcmp(streams[2].title, "Outro stream"));
+    assert(!strcmp(streams[2].title, "Another stream"));
     assert(xs_stream_parse(stream_json, streams, 1) == 1);
 
     puts("OK: stream-only addons, catalog, HTTP and torrent metadata");

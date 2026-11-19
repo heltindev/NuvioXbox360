@@ -43,12 +43,12 @@ bool xs_http_get(const char *url, char *buffer, size_t capacity,
     buffer[0] = '\0';
     error[0] = '\0';
     if (strncmp(url, "https://", 8) && strncmp(url, "http://", 7)) {
-        snprintf(error, error_capacity, "Somente HTTP e HTTPS sao permitidos");
+        snprintf(error, error_capacity, "Only HTTP and HTTPS are supported");
         return false;
     }
     CURL *curl = curl_easy_init();
     if (!curl) {
-        snprintf(error, error_capacity, "Falha na inicializacao do CURL");
+        snprintf(error, error_capacity, "Could not initialize HTTP client");
         return false;
     }
     XsDownload download = { buffer, capacity, 0, false };
@@ -70,7 +70,7 @@ bool xs_http_get(const char *url, char *buffer, size_t capacity,
     curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
     const CURLcode result = curl_easy_perform(curl);
     if (result != CURLE_OK) {
-        snprintf(error, error_capacity, "%s", download.overflow ? "Resposta muito grande" :
+        snprintf(error, error_capacity, "%s", download.overflow ? "Response too large" :
                  (curl_error[0] ? curl_error : curl_easy_strerror(result)));
     }
     curl_easy_cleanup(curl);

@@ -30,7 +30,7 @@ static size_t item_count, addon_count, stream_count;
 static int selection, selected_item, selected_addon, selected_stream;
 static XsScreen screen_state = SCREEN_CATALOG;
 static char catalog_manifest_url[XS_URL_MAX];
-static char status_line[256] = "Aguardando rede...";
+static char status_line[256] = "Waiting for network...";
 static char response[256 * 1024];
 static uint32_t display_width, display_height;
 
@@ -51,7 +51,7 @@ static void read_configuration(void)
 {
     // Cinemeta supplies titles; stream-only addons are read separately.
     snprintf(catalog_manifest_url, sizeof catalog_manifest_url, "%s", "https://v3-cinemeta.strem.io/manifest.json");
-    FILE *file = fopen("game:/addon_url.txt", "rb");
+    FILE *file = fopen("game:/catalog_manifest.txt", "rb");
     char line[XS_URL_MAX];
     if (file) {
         if (fgets(line, sizeof line, file)) {
@@ -78,7 +78,7 @@ static const char *addon_label(size_t index)
     if (addon_manifests[index].addon_name[0]) return addon_manifests[index].addon_name;
     if (strstr(addon_urls[index], "torrentio.strem.fun")) return "Torrentio";
     if (strstr(addon_urls[index], "brazuca-torrents")) return "Brazuca Torrents";
-    return "Complemento Stremio";
+    return "Stremio addon";
 }
 
 static void draw_screen(void)
@@ -89,19 +89,20 @@ static void draw_screen(void)
     xsdk_text_draw(54, 23, 3, WHITE, "NUVIO");
     xsdk_text_draw(215, 44, 2, ACCENT, ".XEX");
     xsdk_text_draw(765, 48, 1, GOLD, "BETA 0.3  |  XBOX 360 RGH  |  AURORA");
-    xsdk_text_draw(57, 116, 1, MUTED, "INICIO    COMPLEMENTOS    MINHA LISTA (EM BREVE)    CONFIGURACOES (EM BREVE)");
+    xsdk_text_draw(57, 116, 1, MUTED, "HOME    ADDONS    MY LIBRARY (COMING SOON)    SETTINGS (COMING SOON)");
     xsdk_text_draw(55, 158, 2, WHITE,
-                   screen_state == SCREEN_CATALOG ? "FILMES E SERIES" :
-                   screen_state == SCREEN_ADDONS ? "ESCOLHA O COMPLEMENTO" :
-                   screen_state == SCREEN_STREAMS ? "FONTES DISPONIVEIS" : "REPRODUCAO");
+                   screen_state == SCREEN_CATALOG ? "MOVIES & SERIES" :
+                   screen_state == SCREEN_ADDONS ? "CHOOSE AN ADDON" :
+                   screen_state == SCREEN_STREAMS ? "STREAM SOURCES" : "PLAYBACK");
     draw_panel(872, 196, 35, 18, PANEL);
-    xsdk_text_draw(893, 218, 1, ACCENT, "DETALHES");
+    xsdk_text_draw(893, 218, 1, ACCENT, "DETAILS");
 
     char info[100];
     if (item_count) {
-        snprintf(info, sizeof info, "%.30s", items[selected_item].title);
+        const size_t highlighted = screen_state == SCREEN_CATALOG ? (size_t)selection : (size_t)selected_item;
+        snprintf(info, sizeof info, "%.30s", items[highlighted].title);
         xsdk_text_draw(893, 268, 1, WHITE, info);
-        snprintf(info, sizeof info, "TIPO: %.20s", items[selected_item].type);
+        snprintf(info, sizeof info, "TYPE: %.20s", items[highlighted].type);
         xsdk_text_draw(893, 308, 1, MUTED, info);
     }
     if (screen_state == SCREEN_ADDONS || screen_state == SCREEN_STREAMS || screen_state == SCREEN_DETAILS) {
@@ -110,19 +111,19 @@ static void draw_screen(void)
             xsdk_text_draw(893, 364, 1, GOLD, info);
         }
     }
-    xsdk_text_draw(893, 444, 1, MUTED, "INTERFACE EXPERIMENTAL");
-    xsdk_text_draw(893, 477, 1, MUTED, "Reproducao de video:");
-    xsdk_text_draw(893, 501, 1, ERROR_COLOR, "AINDA NAO DISPONIVEL");
+    xsdk_text_draw(893, 444, 1, MUTED, "EARLY PREVIEW");
+    xsdk_text_draw(893, 477, 1, MUTED, "Video playback:");
+    xsdk_text_draw(893, 501, 1, ERROR_COLOR, "NOT AVAILABLE YET");
 
     if (screen_state == SCREEN_DETAILS) {
         if (streams[selected_stream].is_torrent) {
-            xsdk_text_draw(65, 240, 1, WHITE, "Fonte BitTorrent identificada.");
-            xsdk_text_draw(65, 287, 1, MUTED, "Falta um cliente torrent nativo para baixar as partes.");
+            xsdk_text_draw(65, 240, 1, WHITE, "BitTorrent source detected.");
+            xsdk_text_draw(65, 287, 1, MUTED, "A native torrent engine is not implemented yet.");
         } else {
-            xsdk_text_draw(65, 240, 1, WHITE, "Fonte HTTP identificada.");
-            xsdk_text_draw(65, 287, 1, MUTED, "Falta integrar video H.264 e a saida de audio.");
+            xsdk_text_draw(65, 240, 1, WHITE, "HTTP source detected.");
+            xsdk_text_draw(65, 287, 1, MUTED, "H.264 decoding and audio playback are still missing.");
         }
-        xsdk_text_draw(65, 344, 1, GOLD, "Esta versao nao reproduz videos. B para voltar.");
+        xsdk_text_draw(65, 344, 1, GOLD, "This preview cannot play videos. Press B to go back.");
     } else {
         const size_t count = screen_state == SCREEN_CATALOG ? item_count :
                              screen_state == SCREEN_ADDONS ? addon_count : stream_count;
@@ -139,14 +140,14 @@ static void draw_screen(void)
             xsdk_text_draw(68, row_y + 5, 1, focused ? ACCENT : WHITE, line);
         }
         if (!count)
-            xsdk_text_draw(65, 234, 1, MUTED, "Nenhum item encontrado. Confira os arquivos de configuracao.");
+            xsdk_text_draw(65, 234, 1, MUTED, "No items found. Check the configuration files.");
     }
 
     draw_panel(55, 605, 75, 1, PANEL);
     char footer[115];
     snprintf(footer, sizeof footer, "%.70s", status_line);
     xsdk_text_draw(62, 606, 1, GOLD, footer);
-    xsdk_text_draw(57, 671, 1, MUTED, "A SELECIONAR  |  B VOLTAR  |  Y ATUALIZAR  |  BACK SAIR");
+    xsdk_text_draw(57, 671, 1, MUTED, "A SELECT  |  B BACK  |  Y REFRESH  |  BACK BUTTON EXIT");
     xsdk_gpu_resolve(frame_address, display_width, display_height, BACKGROUND);
     xsdk_present_end();
 }
@@ -167,24 +168,24 @@ static void load_catalog(void)
     screen_state = SCREEN_CATALOG;
     if (!xs_build_resource_url(&catalog_manifest, "catalog", catalog_manifest.catalog_type,
                                catalog_manifest.catalog_id, url, sizeof url)) {
-        snprintf(status_line, sizeof status_line, "URL de catalogo invalida");
+        snprintf(status_line, sizeof status_line, "Invalid catalog URL");
         return;
     }
-    loading("Buscando catalogo via HTTPS...");
+    loading("Loading catalog over HTTPS...");
     if (!xs_http_get(url, response, sizeof response, status_line, sizeof status_line)) return;
     item_count = xs_catalog_parse(response, items, XS_MAX_ITEMS);
-    snprintf(status_line, sizeof status_line, "%s: %u titulos", catalog_manifest.addon_name,
+    snprintf(status_line, sizeof status_line, "%s: %u titles", catalog_manifest.addon_name,
              (unsigned)item_count);
     xsdk_log_write("NUVIO.XEX: %u titles loaded from %s", (unsigned)item_count, url);
 }
 
 static void load_manifest(void)
 {
-    loading("Conectando ao catalogo...");
+    loading("Connecting to catalog...");
     if (!xs_http_get(catalog_manifest_url, response, sizeof response, status_line, sizeof status_line)) return;
     if (!xs_manifest_parse(response, catalog_manifest_url, &catalog_manifest) ||
         !catalog_manifest.catalog_id[0]) {
-        snprintf(status_line, sizeof status_line, "Manifesto sem catalogo movie/series valido");
+        snprintf(status_line, sizeof status_line, "Manifest has no valid movie or series catalog");
         return;
     }
     load_catalog();
@@ -197,15 +198,15 @@ static void load_streams(void)
     char url[XS_URL_MAX];
     if (!xs_build_resource_url(&addon_manifests[selected_addon], "stream", item.type,
                                item.id, url, sizeof url)) {
-        snprintf(status_line, sizeof status_line, "URL de stream invalida");
+        snprintf(status_line, sizeof status_line, "Invalid stream URL");
         return;
     }
-    loading("Consultando fontes de streaming...");
+    loading("Looking for stream sources...");
     if (!xs_http_get(url, response, sizeof response, status_line, sizeof status_line)) return;
     stream_count = xs_stream_parse(response, streams, XS_MAX_STREAMS);
     selection = 0;
     screen_state = SCREEN_STREAMS;
-    snprintf(status_line, sizeof status_line, "%u fontes encontradas; player ainda pendente",
+    snprintf(status_line, sizeof status_line, "%u sources found; playback is not ready",
              (unsigned)stream_count);
 }
 
@@ -215,12 +216,12 @@ static void open_addon(void)
     selected_addon = selection;
     XsManifest *addon = &addon_manifests[selected_addon];
     if (!addon->supports_stream) {
-        loading("Verificando o manifesto do complemento...");
+        loading("Checking addon manifest...");
         if (!xs_http_get(addon_urls[selected_addon], response, sizeof response,
                          status_line, sizeof status_line)) return;
         if (!xs_manifest_parse(response, addon_urls[selected_addon], addon) ||
             !addon->supports_stream) {
-            snprintf(status_line, sizeof status_line, "Complemento nao possui recurso stream");
+            snprintf(status_line, sizeof status_line, "This addon does not provide stream resources");
             return;
         }
     }
@@ -253,7 +254,7 @@ static void process_button(uint16_t pressed)
             selected_item = selection;
             selection = 0;
             screen_state = SCREEN_ADDONS;
-            snprintf(status_line, sizeof status_line, "Selecione Torrentio ou Brazuca");
+            snprintf(status_line, sizeof status_line, "Choose Torrentio or Brazuca Torrents");
         } else if (screen_state == SCREEN_ADDONS) open_addon();
         else if (screen_state == SCREEN_STREAMS && stream_count) {
             selected_stream = selection;
@@ -278,7 +279,7 @@ int main(void)
         return 1;
     }
     if (xs_http_init()) load_manifest();
-    else snprintf(status_line, sizeof status_line, "Nao foi possivel iniciar a rede");
+    else snprintf(status_line, sizeof status_line, "Could not initialize network");
 
     uint16_t previous = 0;
     for (;;) {
