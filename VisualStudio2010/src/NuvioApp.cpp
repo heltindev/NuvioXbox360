@@ -1,5 +1,47 @@
 #include "NuvioApp.h"
 
+void NuvioNavigationRepeaterReset(NuvioNavigationRepeater *repeater)
+{
+    if (!repeater) return;
+    repeater->heldDirection = 0;
+    repeater->lastActionMs = 0;
+    repeater->waitingForFirstRepeat = true;
+}
+
+int NuvioNavigationRepeat(NuvioNavigationRepeater *repeater,
+                          int direction, unsigned long nowMs)
+{
+    if (!repeater) return 0;
+    if (direction > 0) direction = 1;
+    if (direction < 0) direction = -1;
+    if (direction == 0) {
+        NuvioNavigationRepeaterReset(repeater);
+        return 0;
+    }
+    if (direction != repeater->heldDirection) {
+        repeater->heldDirection = direction;
+        repeater->lastActionMs = nowMs;
+        repeater->waitingForFirstRepeat = true;
+        return direction;
+    }
+
+    const unsigned long delayMs = repeater->waitingForFirstRepeat ? 320UL : 110UL;
+    if (nowMs - repeater->lastActionMs >= delayMs) {
+        repeater->lastActionMs = nowMs;
+        repeater->waitingForFirstRepeat = false;
+        return direction;
+    }
+    return 0;
+}
+
+int NuvioThumbDirection(short axis, int deadzone)
+{
+    if (deadzone < 0) deadzone = 0;
+    if (axis > deadzone) return 1;
+    if (axis < -deadzone) return -1;
+    return 0;
+}
+
 static NuvioScreen SidebarScreen(int index)
 {
     static const NuvioScreen kScreens[5] = {
