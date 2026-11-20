@@ -1,83 +1,63 @@
-<div align="center">
-  <img src="assets/banner.svg" alt="NUVIO.XEX — native Xbox 360 project" width="100%" />
+# NUVIO — v0.1.0-alpha.2
 
-  # NUVIO.XEX 🎮
+Cliente nativo de TV para Xbox 360 RGH/JTAG, inspirado no NuvioTV. Abra **VisualStudio2010/Release/NUVIO.xex**.
 
-  **An unofficial, open-source Nuvio-inspired application for Xbox 360 RGH/JTAG.**
+## Esta versao
 
-  ![Platform](https://img.shields.io/badge/Platform-Xbox%20360%20RGH%20%2F%20JTAG-21c9ad)
-  ![Editor](https://img.shields.io/badge/Project-Visual%20Studio%202010-5865f2)
-  ![Stage](https://img.shields.io/badge/Status-Streaming%20UI%20Preview-eab04f)
+- Interface preta com foco branco, sem animacoes, sem popup por cima dos cartazes.
+- Inicio com fundo, metadados e categorias dos addons; grade separada de filmes/series.
+- Analogico esquerdo, analogico direito e direcional digital, com zona morta e repeticao.
+- Capas de 160x240 em um cache de somente 12 texturas; apenas itens visiveis sao baixados.
+- Downloads de capas, metadados, fontes e alteracoes de addons fora da thread de desenho.
+- Respostas HTTP de metadados/imagens limitadas a 2 MiB e imagens verificadas antes de descomprimir.
+- Player nativo FFmpeg, renderizacao YUV na GPU e audio XAudio2. Filas de pacotes limitadas em quantidade e bytes, tres quadros de video e audio estereo.
+- Conta QR, sessao salva, addons por perfil, busca, biblioteca e logout mantidos.
+- Barra lateral com botoes de 60 pixels, icones de 40 pixels e nomes ao focar.
+- Cliente torrent v1 experimental integrado ao player: metadados e partes verificados com SHA-1, duas partes em cache (ate 8 MiB), sem baixar o filme inteiro em RAM.
 
-  **[🧰 OPEN THE VISUAL STUDIO PROJECT](VisualStudio2010/)** · **[📋 ROADMAP](ROADMAP.md)** · **[📥 RELEASES](https://github.com/heltindev/NuvioXbox360/releases)**
-</div>
+## Controles
 
----
+| Tela | Controles |
+| --- | --- |
+| Inicio | Direcionais/analogicos: navegar; A: detalhes; X: atualizar; Y: buscar; LB/RB: grupos de categorias |
+| Filmes e series | Y: trocar Filmes/Series/Todos; Start: buscar; A: detalhes |
+| Busca | A: tecla; X: apagar; Y: espaco; Start: pesquisar |
+| Detalhes | A: escolher episodio/fontes; X: salvar na biblioteca |
+| Fontes | A: reproduzir a fonte selecionada; X: atualizar; B: voltar |
+| Player | A/Start: pausar/continuar; esquerda/direita: voltar/avancar 10 segundos; B: sair do video |
+| Configuracoes | Addons, trocar perfil, sincronizar conta e sair; Y: sair da conta |
+| Addons | A: ativar/desativar ou instalar URL; X: remover; Y: sincronizar |
 
-> [!IMPORTANT]
-> **This is a streaming-style interface preview, not a video player.** The UI includes an **Admin** profile, poster-shaped placeholders, browse rows and an optional offline IMDb metadata import. It does **not** play videos or download posters. The Xbox 360 XDK build has compiled on the maintainer's PC, but actual Xbox 360 hardware has not been verified.
+## Conversao automatica
 
-## ✨ About the project
+O cliente integra um servidor opcional de conversao para MP4 H.264/SDR ate 720p com AAC estereo. Para iniciar no PC, execute `tools/start_transcoder.cmd`; copie o `nuvio.cfg` gerado junto com o XEX. O PC precisa ficar ligado. O servidor prepara o arquivo completo antes de reproduzir. Leia [docs/TRANSCODING.md](docs/TRANSCODING.md) para configuracao, magnet/TorrServer e limites.
 
-The goal is to reimagine the open-source [Nuvio Mobile](https://github.com/NuvioMedia/NuvioMobile) experience as a native Xbox 360 application. Its current codebase uses Kotlin Multiplatform; Xbox 360 requires a new PowerPC/XDK application, so this repository starts with a small, independent C++ implementation.
+## Formatos e torrents
 
-The project currently contains **only NUVIO-specific app scaffolding**. No third-party media integrations are included.
+Escolha fontes **H.264/AVC ate 720p**, de preferencia com audio AAC estereo. A biblioteca do player tambem oferece codecs legados, mas o teste automatizado desta alteracao validou H.264/AAC em MP4. HEVC/H.265, AV1, DRM e 1080p nao sao garantidos; fontes acima de 1280x720 sao recusadas para manter o consumo limitado.
 
-## 🧰 Open it in Visual Studio 2010
+Links HTTP/HTTPS dos addons entram diretamente no player, com cabecalhos do provedor, redirecionamentos limitados e HTTP Range.
 
-1. Select **Code → Download ZIP** on this repository, or clone it with Git.
-2. Extract the files and open [`VisualStudio2010/NUVIO.XEX.sln`](VisualStudio2010/NUVIO.XEX.sln).
-3. Make sure **Visual C++** and a separately installed, legally licensed **Xbox 360 XDK with Visual Studio integration** are available.
-4. Choose **Debug | Xbox 360** in the toolbar and select **Build → Build Solution**.
-5. If it compiles, look for `VisualStudio2010/Debug/NUVIO.XEX.xex` (or `Release/NUVIO.XEX.xex`) and see [INSTALL-ON-XBOX.txt](INSTALL-ON-XBOX.txt).
+Fontes magnet/infoHash agora entram no cliente BitTorrent **dentro do XEX**, que busca peers por tracker UDP/HTTP ou DHT IPv4, obtem metadados por `ut_metadata`, verifica as partes e entrega os bytes ao FFmpeg. O indice `fileIdx` do addon seleciona o arquivo correto de um torrent com varios arquivos. Nao precisa de um processo rodando no PC para esse caminho.
 
-**If Visual Studio shows only Win32/x64 instead of Xbox 360**, the required XDK build integration is missing. Installing the standard Visual Studio C++ compiler alone will not build a console executable.
+Esta implementacao e experimental: aceita torrents v1/SHA-1 por TCP sem criptografia de protocolo, metadados de ate 1 MiB e partes de ate 4 MiB. Nao implementa uTP, BitTorrent v2, IPv6 ou conversao de codec. A velocidade depende de peers compativeis e das partes disponiveis. O teste controlado no Windows passou; o novo caminho completo no Xbox/emulador ainda precisa ser confirmado.
 
-See [Visual Studio starter guide](VisualStudio2010/README.md) and [developer documentation](docs/DEVELOPMENT.md) for details.
+Se voce ja utiliza TorrServer, a configuracao opcional abaixo continua encaminhando o magnet para ele:
 
-## 🕹️ First prototype
+```
+torrent_server=https://SEU-SERVIDOR
+```
 
-| Feature | Status |
-|---|---|
-| Visual Studio 2010 Xbox 360 solution/project files | ✅ Initial version built with XDK 21256 |
-| Small reusable NUVIO menu-state engine | ✅ Host tests passing |
-| Xbox controller handling (D-pad, A, B, Back) | 🧪 Written; hardware test pending |
-| Admin-only profile chooser | ✅ Implemented; profile creation planned |
-| 720p TV-style sidebar and navigable catalog rows | ✅ Compiled with XDK 21256; visual test pending |
-| Fictional demo catalog and bounded offline IMDb metadata importer | ✅ Implemented; import your own datasets |
-| Real film posters, network-based discovery and rich search | 🚧 Not implemented |
-| Audio/video playback and network features | 🚧 Not implemented |
+Nao existe servidor publico predefinido. Uma fonte 4K/H.265 continua exigindo conversao externa para formato leve; resolver o torrent nao muda o codec do video.
 
-The app opens with **Who's watching? → Admin**. Press **A** to enter the Nuvio-inspired catalog home, navigate the sidebar and rows with the **D-pad**, open metadata details with **A**, switch back to the profile with **B**, and exit with **Back**. All poster artwork currently consists of **procedural placeholders**, not actual movie imagery.
+## Verificacao
 
-### 🎬 Want to try real IMDb title names?
+O player foi executado no Xenia Canary com um arquivo de teste H.264 854x480/AAC 48 kHz estereo: 52 quadros decodificados, 48 exibidos, zero descartados no teste curto. O novo cliente torrent passou no Windows com tracker UDP e peer TCP controlados: arquivo completo de 4.372.373 bytes, verificacao de partes, busca e recusa de dados corrompidos. Esse teste e separado do teste anterior de arquivo local no Xenia. Navegacao, entrada analogica, autenticacao, addons e selecao de fontes possuem testes locais. Isso nao comprova todos os codecs, provedores nem desempenho do Xbox fisico. Veja [docs/VALIDATION.md](docs/VALIDATION.md).
 
-The Xbox cannot download the entire IMDb database or its posters automatically. You can import a **small local subset of IMDb title metadata (up to 240 titles in this preview)** for your own noncommercial testing:
+## Compilacao
 
-1. Download the official `title.basics.tsv.gz` and `title.ratings.tsv.gz` files from [IMDb Non-Commercial Datasets](https://developer.imdb.com/non-commercial-datasets/) on your PC; review IMDb's usage terms.
-2. Run `python tools/import_imdb.py --basics title.basics.tsv.gz --ratings title.ratings.tsv.gz --output catalog.tsv` in this repository.
-3. Copy the generated `catalog.tsv` beside `NUVIO.XEX.xex` on the Xbox or Xenia test folder.
+Abra `VisualStudio2010/NUVIO.sln` no VS2010 com XDK e selecione Release | Xbox 360. `build_decoder.ps1` compila as dependencias do decoder e `build_native_tls.ps1` compila HTTPS/TLS quando necessario. Preserve ThirdParty e suas licencas.
 
-The importer is optional: without the file, the app shows a visibly labeled **Demo Catalog** of fictional titles. See the [simple IMDb import guide](docs/IMDB_CATALOG.md).
+O cache `nuvio_session.dat` e privado da conta. Nao o compartilhe. O aplicativo permanece nao oficial. Consulte [NOTICE.md](NOTICE.md) para as licencas do player combinado.
 
-## 📁 Repository structure
-
-| Path | Purpose |
-|---|---|
-| `VisualStudio2010/NUVIO.XEX.sln` | Open this solution in Visual Studio 2010 |
-| `VisualStudio2010/NUVIO.XEX.vcxproj` | Xbox 360 project configuration |
-| `VisualStudio2010/src/XboxMain.cpp` | Profile UI, artwork placeholders, XDK graphics and controller |
-| `VisualStudio2010/src/NuvioApp.cpp` | Admin profile and TV-style navigation logic |
-| `VisualStudio2010/src/NuvioCatalog.cpp` | Local offline catalog parser and demo data |
-| `tools/import_imdb.py` | Optional PC importer for IMDb TSV metadata |
-| `VisualStudio2010/tests/` | PC-runnable navigation and catalog tests |
-| `docs/DEVELOPMENT.md` | Local build instructions |
-| `docs/PORTING.md` | Long-term Nuvio feature plan |
-
-## 🤝 Credits, license, and distribution
-
-- Unofficial community project. Not affiliated with NuvioMedia or Microsoft.
-- [Nuvio Mobile](https://github.com/NuvioMedia/NuvioMobile) and [Nuvio TV](https://github.com/NuvioMedia/NuvioTV) are upstream design/architecture references. **Their copyrighted implementation is not copied into this independent C++ codebase.**
-- This repository retains its existing [Apache-2.0 license](LICENSE). If upstream GPL-covered implementation is copied later, a licensing review and compliance changes will be necessary.
-- Microsoft XDK tools and files are proprietary and are **not bundled** or hosted here. Obtain and use them only under appropriate rights.
-- Download future tested builds from [Releases](https://github.com/heltindev/NuvioXbox360/releases); maintainers publish them manually after hardware testing.
+Source build: run `VisualStudio2010/bootstrap_dependencies.ps1`, then `build_native_tls.ps1`, `build_decoder.ps1` and build `NUVIO.vcxproj`. See [release notes](docs/RELEASE_NOTES.md) and [checklist](docs/CHECKLIST.md).

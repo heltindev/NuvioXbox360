@@ -1,0 +1,31 @@
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "NUVIO", "NUVIO.vcxproj", "{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "https", "ThirdParty\x360-homebrew-libs\https\https.vcxproj", "{3A1F6C2E-7B4D-4E8A-9C1D-2F3E4A5B6C73}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Debug|Xbox 360 = Debug|Xbox 360
+		Release|Win32 = Release|Win32
+		Release|Xbox 360 = Release|Xbox 360
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}.Debug|Win32.ActiveCfg = Debug|Xbox 360
+		{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}.Debug|Xbox 360.ActiveCfg = Debug|Xbox 360
+		{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}.Debug|Xbox 360.Build.0 = Debug|Xbox 360
+		{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}.Release|Win32.ActiveCfg = Release|Xbox 360
+		{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}.Release|Xbox 360.ActiveCfg = Release|Xbox 360
+		{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}.Release|Xbox 360.Build.0 = Release|Xbox 360
+		{3A1F6C2E-7B4D-4E8A-9C1D-2F3E4A5B6C73}.Debug|Win32.ActiveCfg = Debug|Xbox 360
+		{3A1F6C2E-7B4D-4E8A-9C1D-2F3E4A5B6C73}.Debug|Xbox 360.ActiveCfg = Debug|Xbox 360
+		{3A1F6C2E-7B4D-4E8A-9C1D-2F3E4A5B6C73}.Debug|Xbox 360.Build.0 = Debug|Xbox 360
+		{3A1F6C2E-7B4D-4E8A-9C1D-2F3E4A5B6C73}.Release|Win32.ActiveCfg = Release|Xbox 360
+		{3A1F6C2E-7B4D-4E8A-9C1D-2F3E4A5B6C73}.Release|Xbox 360.ActiveCfg = Release|Xbox 360
+		{3A1F6C2E-7B4D-4E8A-9C1D-2F3E4A5B6C73}.Release|Xbox 360.Build.0 = Release|Xbox 360
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

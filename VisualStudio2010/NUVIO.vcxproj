@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Xbox 360">
+      <Configuration>Debug</Configuration>
+      <Platform>Xbox 360</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Xbox 360">
+      <Configuration>Release</Configuration>
+      <Platform>Xbox 360</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{F8C1B9A2-7178-4F4B-9966-10E3C93D2345}</ProjectGuid>
+    <Keyword>Xbox360Proj</Keyword>
+    <ProjectName>NUVIO</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Xbox 360'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Xbox 360'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Xbox 360'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Xbox 360'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Xbox 360'">
+    <OutDir>$(ProjectDir)bin\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)obj\$(Configuration)\</IntDir>
+    <TargetName>NUVIO</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Xbox 360'">
+    <OutDir>$(ProjectDir)bin\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)obj\$(Configuration)\</IntDir>
+    <TargetName>NUVIO</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Xbox 360'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_XBOX;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)ThirdParty\simple360player;$(ProjectDir)ThirdParty\x360-homebrew-libs\video;$(ProjectDir)ThirdParty\x360-homebrew-libs\guard;$(ProjectDir)ThirdParty\x360-homebrew-libs\log;$(ProjectDir)ThirdParty\Headers;$(ProjectDir)ThirdParty\x360-homebrew-libs\https;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)ThirdParty\x360-homebrew-libs\build\Release\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>video.lib;guard.lib;xaudio2.lib;xmcore.lib;$(ProjectDir)ThirdParty\x360-homebrew-libs\external\ffmpeg360\vcproj\libavformat\Xbox 360\Release\libavformat.lib;$(ProjectDir)ThirdParty\x360-homebrew-libs\external\ffmpeg360\vcproj\libavcodec\Xbox 360\Release\libavcodec.lib;$(ProjectDir)ThirdParty\x360-homebrew-libs\external\ffmpeg360\vcproj\libswscale\Xbox 360\Release\libswscale.lib;$(ProjectDir)ThirdParty\x360-homebrew-libs\external\ffmpeg360\vcproj\libavutil\Xbox 360\Release\libavutil.lib;$(ProjectDir)ThirdParty\x360-homebrew-libs\external\ffmpeg360\vcproj\external\zlib\Xbox 360\Release\zlib.lib;https.lib;mbedtls.lib;log.lib;xapilibd.lib;d3d9d.lib;d3dx9d.lib;xgraphics.lib;xnet.lib;xboxkrnl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Xbox 360'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Full</Optimization>
+      <PreprocessorDefinitions>_XBOX;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)ThirdParty\simple360player;$(ProjectDir)ThirdParty\x360-homebrew-libs\video;$(ProjectDir)ThirdParty\x360-homebrew-libs\guard;$(ProjectDir)ThirdParty\x360-homebrew-libs\log;$(ProjectDir)ThirdParty\Headers;$(ProjectDir)ThirdParty\x360-homebrew-libs\https;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)ThirdParty\x360-homebrew-libs\build\Release\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>video.lib;guard.lib;xaudio2.lib;xmcore.lib;$(ProjectDir)ThirdParty\x360-homebrew-libs\external\ffmpeg360\vcproj\libavformat\Xbox 360\Release\libavformat.lib;$(ProjectDir)ThirdParty\x360-homebrew-libs\external\ffmpeg360\vcproj\libavcodec\Xbox 360\Release\libavcodec.lib;$(ProjectDir)ThirdParty\x360-homebrew-libs\external\ffmpeg360\vcproj\libswscale\Xbox 360\Release\libswscale.lib;$(ProjectDir)ThirdParty\x360-homebrew-libs\external\ffmpeg360\vcproj\libavutil\Xbox 360\Release\libavutil.lib;$(ProjectDir)ThirdParty\x360-homebrew-libs\external\ffmpeg360\vcproj\external\zlib\Xbox 360\Release\zlib.lib;https.lib;mbedtls.lib;log.lib;xapilib.lib;d3d9.lib;d3dx9.lib;xgraphics.lib;xnet.lib;xboxkrnl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- Always rebuild the native HTTPS transport when its source changes. -->
+  <ItemGroup>
+    <ProjectReference Include="ThirdParty\x360-homebrew-libs\https\https.vcxproj">
+      <Project>{3A1F6C2E-7B4D-4E8A-9C1D-2F3E4A5B6C73}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\NuvioApp.h" />
+    <ClInclude Include="src\NuvioTorrent.h" />
+    <ClInclude Include="src\NuvioCatalog.h" />
+    <ClInclude Include="src\NuvioGraphics.h" />
+    <ClInclude Include="src\NuvioInput.h" />
+    <ClInclude Include="src\NuvioPlayback.h" />
+    <ClInclude Include="src\NuvioNetwork.h" />
+    <ClInclude Include="src\NuvioNativeBackend.h" />
+    <ClInclude Include="src\NuvioUiAtlas.h" />
+    <ClInclude Include="src\NuvioLogoPng.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\NuvioApp.cpp" />
+    <ClCompile Include="src\NuvioTorrent.cpp" />
+    <ClCompile Include="src\NuvioCatalog.cpp" />
+    <ClCompile Include="src\NuvioGraphics.cpp" />
+    <ClCompile Include="src\NuvioNetwork.cpp" />
+    <ClCompile Include="src\NuvioNativeBackend.cpp" />
+    <ClCompile Include="ThirdParty\Headers\qrcodegen.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="src\XboxMain.cpp" />
+    <ClCompile Include="ThirdParty\simple360player\FFPlayer.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

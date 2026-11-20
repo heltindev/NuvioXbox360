@@ -16,9 +16,15 @@ ipch/
 *.xex
 *.XEX
 *.log
+nuvio_session.dat
+nuvio_session.dat.tmp
+
+*.exe
+*.lib
+*.xdb
+*.tlog
+
+/nuvio.cfg
+*.local
 __pycache__/
-*.pyc
-# IMDb files must be downloaded separately and must not be committed.
-/catalog.tsv
-/title.basics.tsv.gz
-/title.ratings.tsv.gz
+/dist/

@@ -1,0 +1,5 @@
+# Never publish a Nuvio user's authentication session.
+account.json
+account.dat
+__pycache__/
+*.pyc

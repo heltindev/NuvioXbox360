@@ -1,0 +1,10 @@
+build/
+**/Xbox 360/
+**/Release/
+**/Debug/
+*.user
+*.suo
+*.sdf
+*.opensdf
+ipch/
+*.log

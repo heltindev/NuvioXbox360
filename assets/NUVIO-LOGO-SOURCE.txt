@@ -1,0 +1,10 @@
+Official transparent Nuvio logo, downloaded unmodified from:
+https://nuvio.tv/assets/Logo_1080x1080.png
+
+Saved as nuvio-logo.png (488 x 536, RGBA PNG).
+The source image is embedded by tools/embed_logo.py and decoded by stb_image
+at runtime. No internet request is needed to display the app logo.
+
+Reference app and protocol: https://github.com/NuvioMedia/NuvioTV
+See the repository LICENSE (GPL-3.0). Nuvio branding belongs to its owners;
+this unofficial Xbox port does not imply endorsement.

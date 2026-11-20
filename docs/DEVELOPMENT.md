@@ -1,4 +1,4 @@
-# 🛠️ Building NUVIO.XEX on Windows
+# 🛠️ Building NUVIO on Windows
 
 This repository now uses a **Visual Studio 2010 Xbox 360 project**. It no longer requires a separate Linux cross-compiler or a cloud build service.
 
@@ -10,34 +10,32 @@ When selecting installation features, keep **Visual C++** enabled. The x64 compi
 
 The Xbox 360 build platform is supplied by a **separately installed and appropriately licensed** Xbox 360 XDK, not by ordinary Visual Studio 2010. Do not put Microsoft SDK headers, libraries, executables, or installers in this repository.
 
-With the XDK integration installed, Visual Studio should offer an **Xbox 360** platform for C++ projects. The maintainer has successfully compiled the dashboard using **XDK 21256**. Other XDK/Windows combinations may require compatibility adjustments.
+With the XDK integration installed, Visual Studio should offer an **Xbox 360** platform for C++ projects. Depending on the XDK version and Windows version, legacy setup may require repair or compatibility work. We have **not** verified the particular XDK version shown in the maintainer's screenshot.
 
 ## 3. Open the project
 
 1. Download the repository ZIP from GitHub and extract it.
-2. Open `VisualStudio2010/NUVIO.XEX.sln` in Visual Studio 2010.
+2. Open `VisualStudio2010/NUVIO.sln` in Visual Studio 2010.
 3. Select **Debug | Xbox 360**.
 4. Select **Build → Build Solution**.
-5. Check the build output. The tested XDK places `NUVIO.XEX.xex` under `VisualStudio2010/Debug/` or `VisualStudio2010/Release/`. The `bin/` subfolder holds debugging symbol files.
+5. Check the build output. If successful, find `VisualStudio2010/bin/Debug/NUVIO.xex`.
 
 If the project reports that the **Xbox 360 platform is missing**, stop and troubleshoot the XDK installation. Selecting Win32/x64 instead does not fix it.
 
-If the Xbox build reports compiler, API, or linker errors, save the **exact first error message** and the XDK version. The current profile + catalog UI compiled to `.xex` with XDK 21256, but has not yet been confirmed visually in Xenia or on a real console.
+If the Xbox build reports compiler, API, or linker errors, save the **exact first error message** and the XDK version. The starter intentionally does not claim support for all XDK releases. The real `.XEX` has not yet been built or console-tested here.
 
 ## 4. Local test without the XDK
 
-The NUVIO navigation and local metadata catalog are platform-independent. With G++ or Clang installed, run from the repository root:
+Only the NUVIO menu-state engine is platform-independent. With G++ or Clang installed, run from the repository root:
 
 ```bash
 g++ -std=c++98 -Wall -Wextra -Werror \
   VisualStudio2010/tests/NuvioCoreTests.cpp \
-  VisualStudio2010/src/NuvioApp.cpp \
-  VisualStudio2010/src/NuvioCatalog.cpp -o nuvio_core_tests
-./nuvio_core_tests VisualStudio2010/tests/catalog_fixture.tsv
-python -m unittest discover -s tools -p 'test_*.py'
+  VisualStudio2010/src/NuvioApp.cpp -o nuvio_core_tests
+./nuvio_core_tests
 ```
 
-These tests confirm profile navigation, catalog parsing and importer behavior. They do **not** compile the Xbox executable or test graphics.
+This test confirms screen-state transitions. It does **not** compile the Xbox executable or test graphics.
 
 ## 5. Test with Aurora and publish manually
 
@@ -48,9 +46,7 @@ See [RELEASE_NOTES.md](RELEASE_NOTES.md) for an honest preview warning. No downl
 ## Architecture and licensing
 
 - `VisualStudio2010/src/NuvioApp.*`: SDK-independent C++98 application state.
-- `VisualStudio2010/src/NuvioCatalog.*`: bounded offline movie/series metadata parser.
-- `VisualStudio2010/src/XboxMain.cpp`: Xbox 360-specific Admin picker, catalog UI and controller using XDK headers.
-- `tools/import_imdb.py`: optional importer for officially downloaded IMDb metadata (not posters or streams).
-- `VisualStudio2010/NUVIO.XEX.vcxproj`: legacy `Xbox 360` build platform, Debug and Release.
+- `VisualStudio2010/src/XboxMain.cpp`: Xbox 360-specific controller and graphics smoke test using XDK headers.
+- `VisualStudio2010/NUVIO.vcxproj`: legacy `Xbox 360` build platform, Debug and Release.
 - The original [Nuvio Mobile](https://github.com/NuvioMedia/NuvioMobile) is GPL-3.0 software and a feature reference. No upstream implementation has been copied into this independent starter.
 - Microsoft XDK is proprietary. Use it only under applicable licenses and do not redistribute its files.
