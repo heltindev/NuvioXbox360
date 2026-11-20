@@ -7,6 +7,23 @@
 
 int main(int argc, char **argv)
 {
+    NuvioNavigationRepeater horizontal;
+    NuvioNavigationRepeaterReset(&horizontal);
+    assert(NuvioNavigationRepeat(&horizontal, -1, 1000) == -1);
+    assert(NuvioNavigationRepeat(&horizontal, -1, 1250) == 0);
+    assert(NuvioNavigationRepeat(&horizontal, -1, 1320) == -1);
+    assert(NuvioNavigationRepeat(&horizontal, -1, 1400) == 0);
+    assert(NuvioNavigationRepeat(&horizontal, -1, 1430) == -1);
+    assert(NuvioNavigationRepeat(&horizontal, 1, 1440) == 1);
+    assert(NuvioNavigationRepeat(&horizontal, 0, 1450) == 0);
+    assert(NuvioNavigationRepeat(&horizontal, 1, 1460) == 1);
+    assert(NuvioNavigationRepeat(NULL, 1, 1460) == 0);
+    NuvioNavigationRepeaterReset(NULL);
+    assert(NuvioThumbDirection(14000, 14000) == 0);
+    assert(NuvioThumbDirection(14001, 14000) == 1);
+    assert(NuvioThumbDirection(-14001, 14000) == -1);
+    assert(NuvioThumbDirection(0, 14000) == 0);
+
     NuvioState state;
     NuvioInitialize(&state);
     assert(state.screen == NUVIO_SCREEN_PROFILE);
@@ -18,6 +35,14 @@ int main(int argc, char **argv)
     NuvioMoveHorizontal(&state, -1);
     NuvioMoveHorizontal(&state, -1);
     assert(state.sidebarFocused);
+    NuvioMoveVertical(&state, 1, 10);
+    assert(state.sidebarItem == 1);
+    NuvioMoveVertical(&state, -1, 10);
+    assert(state.sidebarItem == 0);
+    NuvioMoveVertical(&state, -1, 10);
+    assert(state.sidebarItem == 4);
+    NuvioMoveVertical(&state, 1, 10);
+    assert(state.sidebarItem == 0);
     NuvioMoveVertical(&state, 1, 10);
     assert(state.sidebarItem == 1);
     NuvioSelect(&state, -1);
