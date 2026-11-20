@@ -198,20 +198,28 @@ static void DrawProfile(UiPainter &ui)
 
 static void DrawSidebar(UiPainter &ui, const NuvioState &state)
 {
-    ui.Rect(0, 0, 96, SCREEN_HEIGHT, kSide);
-    ui.Rect(95, 0, 1, SCREEN_HEIGHT, Rgb(32, 37, 44));
+    // Wide, static navigation targets are easier to read on a TV and cost
+    // less than animating an expanding sidebar on the Xbox 360.
+    const int sidebarWidth = 124;
+    ui.Rect(0, 0, sidebarWidth, SCREEN_HEIGHT, kSide);
+    ui.Rect(sidebarWidth - 1, 0, 1, SCREEN_HEIGHT, Rgb(32, 37, 44));
     const char *icons[5] = { "H", "D", "?", "L", "G" };
+    const char *labels[5] = { "HOME", "DISCOVER", "SEARCH", "LIBRARY", "SETTINGS" };
     for (int i = 0; i < 5; ++i) {
-        const int y = 119 + i * 116;
+        const int y = 92 + i * 116;
         const bool active = state.sidebarItem == i;
+        const bool focused = active && state.sidebarFocused;
         if (active) {
-            ui.Circle(48, y + 20, 31, Rgb(24, 35, 47));
-            ui.Rect(0, y - 12, 5, 65, kBlue);
+            ui.Rect(8, y - 8, 108, 88, Rgb(24, 35, 47));
+            ui.Rect(0, y - 8, 5, 88, kBlue);
         }
-        if (state.sidebarFocused && active) ui.Outline(16, y - 8, 64, 56, 3, kBlue);
-        ui.Text(32, y + 5, 4, icons[i], active ? kBlue : kMuted);
+        if (focused) ui.Outline(8, y - 8, 108, 88, 3, kBlue);
+        ui.Text(47, y + 4, 5, icons[i], active ? kBlue : kMuted);
+        const int labelWidth = static_cast<int>(std::strlen(labels[i])) * 12;
+        ui.Text((sidebarWidth - labelWidth) / 2, y + 56, 2,
+                labels[i], focused ? kWhite : kMuted);
     }
-    ui.Text(38, 684, 2, "N", kTeal);
+    ui.Text(52, 684, 2, "N", kTeal);
 }
 
 static void DrawTopRight(UiPainter &ui, const NuvioCatalog &catalog)
@@ -403,6 +411,12 @@ int main()
     }
 
     WORD previousButtons = 0;
+    NuvioNavigationRepeater horizontalRepeat;
+    NuvioNavigationRepeater verticalRepeat;
+    NuvioNavigationRepeaterReset(&horizontalRepeat);
+    NuvioNavigationRepeaterReset(&verticalRepeat);
+    DWORD lastPresentMs = 0;
+    bool screenDirty = true;
     bool running = true;
     while (running) {
         XINPUT_STATE input;
@@ -412,21 +426,46 @@ int main()
         const WORD pressed = buttons & static_cast<WORD>(~previousButtons);
         previousButtons = buttons;
 
+        // D-pad takes priority over the thumbstick on each axis. Holding
+        // either control repeats navigation after a short initial delay.
+        int horizontal = 0;
+        int vertical = 0;
+        if (buttons & XINPUT_GAMEPAD_DPAD_RIGHT) horizontal = 1;
+        else if (buttons & XINPUT_GAMEPAD_DPAD_LEFT) horizontal = -1;
+        else horizontal = NuvioThumbDirection(input.Gamepad.sThumbLX, 14000);
+        if (buttons & XINPUT_GAMEPAD_DPAD_DOWN) vertical = 1;
+        else if (buttons & XINPUT_GAMEPAD_DPAD_UP) vertical = -1;
+        else vertical = -NuvioThumbDirection(input.Gamepad.sThumbLY, 14000);
+
+        const DWORD nowMs = GetTickCount();
+        const int horizontalStep = NuvioNavigationRepeat(
+            &horizontalRepeat, horizontal, nowMs);
+        const int verticalStep = NuvioNavigationRepeat(
+            &verticalRepeat, vertical, nowMs);
+
         if (pressed & XINPUT_GAMEPAD_BACK) running = false;
-        if (pressed & XINPUT_GAMEPAD_DPAD_RIGHT) NuvioMoveHorizontal(&app, 1);
-        if (pressed & XINPUT_GAMEPAD_DPAD_LEFT) NuvioMoveHorizontal(&app, -1);
-        if (pressed & XINPUT_GAMEPAD_DPAD_DOWN)
-            NuvioMoveVertical(&app, 1, NuvioCatalogRowCount(&catalog));
-        if (pressed & XINPUT_GAMEPAD_DPAD_UP)
-            NuvioMoveVertical(&app, -1, NuvioCatalogRowCount(&catalog));
+        if (!running) break;
+        if (horizontalStep) NuvioMoveHorizontal(&app, horizontalStep);
+        if (verticalStep)
+            NuvioMoveVertical(&app, verticalStep, NuvioCatalogRowCount(&catalog));
         if (pressed & XINPUT_GAMEPAD_A)
             NuvioSelect(&app, NuvioCatalogIndexForRow(&catalog,
                 app.selectedRow, app.selectedColumn));
         if (pressed & XINPUT_GAMEPAD_B) NuvioBack(&app);
 
-        DrawDashboard(device, app, catalog);
-        device->Present(NULL, NULL, NULL, NULL);
-        Sleep(16);
+        if (horizontalStep || verticalStep ||
+            (pressed & (XINPUT_GAMEPAD_A | XINPUT_GAMEPAD_B)))
+            screenDirty = true;
+
+        // Static screens do not need a 60 fps redraw. Refresh occasionally
+        // even at rest so the framebuffer is kept current without high load.
+        if (screenDirty || nowMs - lastPresentMs >= 250) {
+            DrawDashboard(device, app, catalog);
+            device->Present(NULL, NULL, NULL, NULL);
+            lastPresentMs = nowMs;
+            screenDirty = false;
+        }
+        Sleep(12);
     }
 
     device->Release();
