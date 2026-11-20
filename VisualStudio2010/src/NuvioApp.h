@@ -23,6 +23,19 @@ struct NuvioState {
     bool sidebarFocused;
 };
 
+// Small, allocation-free controller helpers shared with the host tests.
+// The caller supplies its monotonic millisecond counter (GetTickCount on Xbox).
+struct NuvioNavigationRepeater {
+    int heldDirection;
+    unsigned long lastActionMs;
+    bool waitingForFirstRepeat;
+};
+
+void NuvioNavigationRepeaterReset(NuvioNavigationRepeater *repeater);
+int NuvioNavigationRepeat(NuvioNavigationRepeater *repeater,
+                          int direction, unsigned long nowMs);
+int NuvioThumbDirection(short axis, int deadzone);
+
 void NuvioInitialize(NuvioState *state);
 void NuvioMoveHorizontal(NuvioState *state, int direction);
 void NuvioMoveVertical(NuvioState *state, int direction, int rowCount);
