@@ -50,6 +50,9 @@ static void SignedIn() {
     Reply("get_sync_owner",200,"\"00000000-0000-0000-0000-000000000001\"");
 }
 int main() {
+    std::FILE *existingConfig=std::fopen("nuvio.cfg","rb");
+    if(existingConfig){std::fclose(existingConfig);std::fputs("Run isolated cloud tests without a local nuvio.cfg in VisualStudio2010. Existing configuration was preserved.\n",stderr);return 1;}
+
     assert(Canonical("https://addon.test/AbC%7C/manifest.json?token=A%2FB") ==
         "https://addon.test/AbC%7C?token=A%2FB");
     assert(AddonUrl("https://addon.test/AbC?token=A%2FB", "/meta/movie/tmdb%3A42.json") ==

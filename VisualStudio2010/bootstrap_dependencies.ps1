@@ -2,7 +2,7 @@
 $ErrorActionPreference='Stop'
 $revision='43a3969ec2a5103218a4d7120cceac7ea494e846'
 $destination=Join-Path $PSScriptRoot 'ThirdParty\x360-homebrew-libs'
-$checkpoint=Join-Path $destination 'external\ffmpeg360\vcproj\libavcodec\libavcodec.vcxproj'
+$checkpoint=Join-Path $destination 'external\ffmpeg360\libavcodec\utils.c'
 if(Test-Path -LiteralPath $checkpoint){Write-Output 'Pinned decoder sources already present.';exit 0}
 $downloadRoot=Join-Path ([IO.Path]::GetTempPath()) ('nuvio-dependencies-'+$revision)
 New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
