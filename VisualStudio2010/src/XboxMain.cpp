@@ -1303,10 +1303,10 @@ static void ScheduleArtwork(NuvioGraphics &gui,const NuvioState &app,const Nuvio
     }
     for(int i=0;i<n;++i)if(!gui.HasPoster(visible[i])&&ArtworkRetry(1,visible[i])) {
         int ix=visible[i];std::sprintf(path,"/poster/%s.rgba",catalog.items[ix].imdbId);
-        BeginRenderRequest(1,ix,path,180000);return;
+        BeginRenderRequest(1,ix,path,300000);return;
     }
     if(focused>=0&&focused==g_previewIndex&&!gui.HasBackdrop()&&ArtworkRetry(3,focused)) {
-        std::sprintf(path,"/preview/%s.rgba",catalog.items[focused].imdbId);BeginRenderRequest(3,focused,path,1000000);
+        std::sprintf(path,"/preview/%s.rgba",catalog.items[focused].imdbId);BeginRenderRequest(3,focused,path,2200000);
     }
 }
 
