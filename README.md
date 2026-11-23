@@ -40,7 +40,7 @@ Links HTTP/HTTPS dos addons entram diretamente no player, com cabecalhos do prov
 
 Fontes magnet/infoHash agora entram no cliente BitTorrent **dentro do XEX**, que busca peers por tracker UDP/HTTP ou DHT IPv4, obtem metadados por `ut_metadata`, verifica as partes e entrega os bytes ao FFmpeg. O indice `fileIdx` do addon seleciona o arquivo correto de um torrent com varios arquivos. Nao precisa de um processo rodando no PC para esse caminho.
 
-Esta implementacao e experimental: aceita torrents v1/SHA-1 por TCP sem criptografia de protocolo, metadados de ate 1 MiB e partes de ate 4 MiB. Nao implementa uTP, BitTorrent v2, IPv6 ou conversao de codec. A velocidade depende de peers compativeis e das partes disponiveis. O teste controlado no Windows passou; o novo caminho completo no Xbox/emulador ainda precisa ser confirmado.
+Nesta revisao, o cliente consulta mais de um tracker, usa trackers publicos apenas quando o magnet nao fornece nenhum e tenta peers adicionais via DHT quando os primeiros nao oferecem metadados. O indice `fileIdx` continua selecionando o arquivo dentro do torrent.\r\n\r\nEsta implementacao e experimental: aceita torrents v1/SHA-1 por TCP sem criptografia de protocolo, metadados de ate 1 MiB e partes de ate 4 MiB. Nao implementa uTP, BitTorrent v2, IPv6 ou conversao de codec. A velocidade depende de peers compativeis e das partes disponiveis. O teste controlado no Windows passou; o novo caminho completo no Xbox/emulador ainda precisa ser confirmado.
 
 Se voce ja utiliza TorrServer, a configuracao opcional abaixo continua encaminhando o magnet para ele:
 
