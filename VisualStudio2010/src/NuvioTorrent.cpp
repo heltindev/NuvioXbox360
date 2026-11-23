@@ -464,7 +464,8 @@ struct NuvioTorrent::Impl {
                 std::string filename=path.list.empty()?"video":path.list.back().text;
                 std::string lower=filename;for(size_t c=0;c<lower.size();++c)if(lower[c]>='A'&&lower[c]<='Z')lower[c]+='a'-'A';
                 bool video=false;
-                const char *ext[]={".mp4",".mkv",".avi",".wmv",".m4v",".mov",".mpg",".mpeg",".ts",".m2ts",".webm"};
+                const char *ext[]={".mp4",".mkv",".avi",".wmv",".m4v",".mov",".mpg",".mpeg",".ts",".m2ts",".webm",
+                    ".flv",".3gp",".3g2",".vob",".divx",".asf",".ogv",".mts",".m2t",".f4v"};
                 for(size_t e=0;e<sizeof(ext)/sizeof(ext[0]);++e) {
                     size_t n=std::strlen(ext[e]);
                     if(lower.size()>=n&&lower.compare(lower.size()-n,n,ext[e])==0){video=true;break;}
