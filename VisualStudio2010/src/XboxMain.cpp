@@ -14,6 +14,7 @@
 #include "NuvioGraphics.h"
 #include "NuvioInput.h"
 #include "NuvioPlayback.h"
+#include "StreamCompat.h"
 #include "NuvioTorrent.h"
 #include "FFPlayer.h"
 #include <vector>
@@ -1114,25 +1115,58 @@ static bool LoadSourceRows(bool episodes) {
     else std::sprintf(path,"/sources?id=%s&episode=%d",encoded,g_sourceEpisode);
     return ReadSourceRows(path,episodes);
 }
+// Source rows come from the native addon backend: "[BR] ! title | ...".
+static StreamCompat SourceCompatibility(const char *row) {
+    if(!row)return ClassifyStream("");
+    const char *label=row;
+    if(label[0]=='['&&label[3]==']'&&label[4]==' ')label+=5;
+    const bool flagged=label[0]=='!'&&label[1]==' ';
+    if(flagged)label+=2;
+    StreamCompat result=ClassifyStream(label);
+    if(flagged&&result.support!=STREAM_UNSUPPORTED) {
+        result.support=STREAM_UNSUPPORTED;
+        result.reason="Formato requer conversao";
+    }
+    return result;
+}
 static void DrawSourcesScreen(NuvioGraphics &g) {
     DrawGradientBackground(g);
     g.Text(110,40,36,g_episodePicker ? "Choose an episode" : "Addon sources",TEXT_WHITE);
     if (!g_sourceCount) g.Text(110,140,23,g_artThread?"Carregando episodios/fontes...":g_episodePicker?"Nenhum episodio disponivel.":"Nenhuma fonte retornada.",TEXT_MUTED);
     const int top = g_sourceCursor >= 6 ? g_sourceCursor-5 : 0;
     for (int n=0;n<6 && top+n<g_sourceCount;++n) {
-        int i=top+n;
-        g.RoundedRect(110,120+n*72,1050,62,10,i==g_sourceCursor ? BG_HOVER : BG_CARD);
-        if (i==g_sourceCursor) g.Rect(110,120+n*72,4,62,TEXT_WHITE);
+        const int i=top+n;
+        const StreamCompat compat=g_episodePicker?ClassifyStream(""):SourceCompatibility(g_sourceRows[i]);
+        const bool unsupported=compat.support==STREAM_UNSUPPORTED;
+        g.RoundedRect(110,120+n*72,1050,62,10,
+            unsupported?Color(25,25,25):i==g_sourceCursor?BG_HOVER:BG_CARD);
+        if(i==g_sourceCursor)g.Rect(110,120+n*72,4,62,
+            unsupported?Color(143,143,143):TEXT_WHITE);
         const char *label=g_sourceRows[i];
         char country[3]="--";
         if(label[0]=='['&&label[3]==']'&&label[4]==' ') {
             country[0]=label[1];country[1]=label[2];label+=5;
         }
-        if(!g_episodePicker)DrawLanguageFlag(g,130,136+n*72,country);
-        g.Text(g_episodePicker?130:200,136+n*72,18,label,TEXT_WHITE,g_episodePicker?1000:920);
+        if(label[0]=='!'&&label[1]==' ')label+=2;
+        char clean[160];
+        CopyField(clean,sizeof(clean),label);
+        char *annotation=std::strstr(clean," [Conversao:");
+        if(annotation)*annotation=0;
+        if(!g_episodePicker) {
+            DrawLanguageFlag(g,130,136+n*72,country);
+            if(unsupported)g.Rect(130,136+n*72,50,30,Color(13,13,13,155));
+        }
+        g.Text(g_episodePicker?130:200,unsupported?130+n*72:136+n*72,18,clean,
+            unsupported?Color(122,122,122):TEXT_WHITE,g_episodePicker?1000:920);
+        if(unsupported) {
+            char warning[110];
+            std::sprintf(warning,"Requer conversao: %s",compat.reason);
+            g.Text(200,158+n*72,14,warning,Color(175,130,97),850);
+        }
     }
     g.Text(110,590,17,"Idioma informado pelo addon; -- = idioma nao identificado.",TEXT_MUTED);
-    if (!g_episodePicker) g.Text(110,620,17,"MP4/MKV/AVI podem tocar com codec disponivel no Xbox (ate 720p).",TEXT_MUTED);
+    if (!g_episodePicker) g.Text(110,620,17,
+        "Links apagados exigem conversao. O decoder verifica o formato real.",TEXT_MUTED);
     DrawStatusLine(g,650);
     DrawControllerFooter(g,110,681,"Up/Down: Choose   A: Open   X: Refresh   B: Back");
 }
@@ -1701,7 +1735,14 @@ int main() {
                     if (!LoadSourceRows(false)) SetStatus(NuvioNativeLastError());
                 } else {
                     NuvioPlaybackSource source;
-                    if(!NuvioNativePlaybackSource(g_sourceCursor,&source))SetStatus(NuvioNativeLastError());
+                    const StreamCompat compat=SourceCompatibility(g_sourceRows[g_sourceCursor]);
+                    if(!NuvioNativePlaybackSource(g_sourceCursor,&source))
+                        SetStatus(NuvioNativeLastError());
+                    else if(compat.support==STREAM_UNSUPPORTED&&source.prepareBody.empty()) {
+                        char warning[120];
+                        std::sprintf(warning,"%s (%s)",UnsupportedMessage(),compat.reason);
+                        SetStatus(warning);
+                    }
                     else if(source.url.find("magnet:?")==0&&!g_p2pEnabled)
                         SetStatus("Ative Streaming P2P em Configuracoes para abrir torrents.");
                     else {
