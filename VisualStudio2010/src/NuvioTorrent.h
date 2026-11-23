@@ -13,6 +13,8 @@ public:
     void Abort();
     __int64 Size() const;
     const char *Status() const;
+    // Preparation stages, not percentage of the whole movie downloaded.
+    int StartupPercent() const;
     const std::string &Filename() const;
     const std::string &Error() const;
 private:
@@ -21,4 +23,6 @@ private:
     NuvioTorrent(const NuvioTorrent &);
     NuvioTorrent &operator=(const NuvioTorrent &);
 };
+// Clears the on-console metadata cache; in-memory piece buffers end with playback.
+bool NuvioTorrentClearCache();
 #endif

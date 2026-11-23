@@ -492,12 +492,31 @@ bool FFPlayer::OpenMedia( std::string& error )
         src.seek = SourceSeek;
         src.size = m_streamSize;
 
+        // Old FFmpeg demuxers use a filename extension as an extra format hint.
+        // Pass only the basename, never the private URL or its query parameters.
+        std::string probeName = m_torrent ? m_torrent->Filename() : "video";
+        if( !m_torrent ) {
+            const std::string& url = m_urls[m_current];
+            size_t stop = url.find_first_of( "?#" );
+            if( stop == std::string::npos ) stop = url.size();
+            const size_t slash = url.rfind( '/', stop );
+            const size_t begin = slash == std::string::npos ? 0 : slash + 1;
+            const std::string candidate = url.substr( begin, stop - begin );
+            if( candidate.size() <= 120 && candidate.find( '.' ) != std::string::npos )
+                probeName = candidate;
+        }
         char err[128] = "";
         DWORD start = GetTickCount();
-        m_media = fg_open( &src, m_torrent?m_torrent->Filename().c_str():"video", err, sizeof( err ) );
+        m_media = fg_open( &src, probeName.c_str(), err, sizeof( err ) );
         if( !m_media )
         {
-            error = err;
+            error = m_torrent && !m_torrent->Error().empty() ? m_torrent->Error() : err;
+            if( error == "Unknown container format" )
+                error = "Container desconhecido ou dados insuficientes. Teste MP4, MKV ou AVI com codec suportado.";
+            else if( error == "Video codec not supported" )
+                error = "Codec ausente no decoder: tente H.264/AVC, Xvid, MPEG-2 ou WMV ate 720p.";
+            else if( error == "No video in this file" )
+                error = "Codec de video nao reconhecido. Escolha outro link H.264/AVC ate 720p.";
             Log::Write( "Player source %u: %s", (unsigned)m_current, err );
             continue;
         }
@@ -506,7 +525,7 @@ bool FFPlayer::OpenMedia( std::string& error )
         fg_get_info( m_media, &info );
         // Reserve RAM/CPU for the console. Do not attempt HEVC or 1080p software decode.
         if(info.width>1280 || info.height>720 || info.width<=0 || info.height<=0) {
-            error="Escolha uma fonte H.264/AVC de ate 720p.";
+            error="Resolucao acima do limite: escolha um video de ate 1280x720.";
             fg_close(m_media);m_media=NULL;return false;
         }
         if( info.duration > 0 && m_timeOffset == 0 )
@@ -1254,6 +1273,26 @@ void FFPlayer::RenderFrame( const D3DRECT& screen )
     m_device->SetPixelShader( NULL );
 }
 
+int FFPlayer::StartupPercent() const
+{
+    if( !m_active ) return 0;
+    if( m_opened && m_haveFrame ) return 100;
+    if( m_ended ) return 0;
+    if( m_opened ) return 95;
+    int progress = m_preparingConversion ? 5 : 10;
+    EnterCriticalSection( (CRITICAL_SECTION*)&m_lock );
+    if( m_torrent ) progress = m_torrent->StartupPercent();
+    LeaveCriticalSection( (CRITICAL_SECTION*)&m_lock );
+
+    // A coarse stage-based startup indicator, never a full-file download meter.
+    // Count demux/probe bytes and cap at 90% until the decoder opens.
+    const __int64 bytes = m_bytesRead;
+    if( bytes > 0 ) {
+        const int sampled = bytes >= 512 * 1024 ? 90 : 50 + (int)(bytes * 40 / (512 * 1024));
+        if( sampled > progress ) progress = sampled;
+    }
+    return progress > 90 ? 90 : progress;
+}
 std::wstring FFPlayer::StatusText() const
 {
     if( !m_active )

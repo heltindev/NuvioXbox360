@@ -8,8 +8,11 @@ BUILD THE XEX
 
 1. Open VisualStudio2010\NUVIO.sln in Visual Studio 2010.
 2. Select Release | Xbox 360 and press F7 (Build Solution).
-3. Find VisualStudio2010\Release\NUVIO.xex.
+3. Find VisualStudio2010\bin\Release\NUVIO.xex.
    Do not confuse this with the PC .exe or Debug symbols.
+   This path comes from the NUVIO.vcxproj OutDir configuration.
+   Confirm the local sources include the latest P2P changes before building.
+   LNK4099 (missing third-party PDB files) is non-fatal if Build succeeded.
 
 TEST IN XENIA CANARY
 
@@ -23,7 +26,7 @@ TEST IN XENIA CANARY
 
 TEST ON AN RGH XBOX 360 WITH AURORA
 
-1. Copy Release\NUVIO.xex into a dedicated folder on FAT32 USB.
+1. Copy VisualStudio2010\bin\Release\NUVIO.xex into a dedicated folder on FAT32 USB.
 2. Open Aurora > File Manager > USB drive.
 3. Launch NUVIO.xex.
 4. Press A on the QR login button. An internet connection is required.

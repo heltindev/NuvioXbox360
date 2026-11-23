@@ -23,7 +23,7 @@ Http::Response Http::Request(const char *, const std::string &url,
         std::fprintf(stderr, "Unexpected endpoint; expected %s\n", e.endpoint.c_str());
         assert(false);
     }
-    assert(headers.find("Accept: application/json") != std::string::npos);
+    assert(url.find("https://images.test/")==0||headers.find("Accept: application/json") != std::string::npos);
     // Credentials must never be forwarded to third-party addon hosts.
     if (url.find("https://api.nuvio.tv") != 0) {
         assert(headers.find("Authorization") == std::string::npos);
@@ -71,6 +71,21 @@ int main() {
     assert(catalog.find("#row\tReal Rail")!=std::string::npos);
     assert(catalog.find("tmdb:42\tmovie\t0\tUpcoming")!=std::string::npos);
     assert(s_art.size()==1 && s_art[0].base=="https://addon.test/Key%7CCase?config=a%2Fb");
+    // Restore a cached page with its artwork/source IDs, without issuing HTTP again.
+    s_art.clear();
+    assert(Catalog(0,"")==catalog&&s_art.size()==1&&s_art[0].id=="tmdb:42");
+    assert(s_catalogCache.size()==1);
+    s_catalogCache[0].stamp-=300001;
+    Reply("/catalog/movie/trending.json?config=a%2Fb",200,
+        "{\"metas\":[{\"id\":\"tmdb:42\",\"name\":\"Upcoming\",\"poster\":\"https://images.test/p.jpg\"}]}");
+    assert(Catalog(0,"")==catalog); // Expired entries must really fetch again.
+    Reply("https://images.test/cache.pgm",200,"P5\n1 1\n255\n\177");
+    const std::string cachedImage=Image("https://images.test/cache.pgm",32,32,false);
+    assert(cachedImage.size()==8+32*32*4);
+    assert(Image("https://images.test/cache.pgm",32,32,false)==cachedImage);
+    s_imageCache[0].stamp-=300001;
+    Reply("https://images.test/cache.pgm",200,"P5\n1 1\n255\n\037");
+    assert(Image("https://images.test/cache.pgm",32,32,false)!=cachedImage);
     Reply("/stream/movie/tmdb%3A42.json?config=a%2Fb",200,
         "{\"streams\":[{\"name\":\"Provider\",\"title\":\"720p\",\"url\":\"https://video.test/private-key.mp4\"}]}");
     const std::string sources=Sources("tmdb:42",-1);
@@ -95,6 +110,14 @@ int main() {
            playable.url.find("&tr=udp%3A%2F%2Ftracker.test%3A80%2Fannounce")!=std::string::npos);
     assert(Parse("{\"url\":\"https://video.test/huge.mp4\",\"name\":\"4K HEVC HDR\"}",hdr));
     s_sources.clear();s_sources.push_back(hdr);assert(!NuvioNativePlaybackSource(0,&playable));
+    assert(std::strcmp(NuvioNativeLastError(),UnsupportedMessage())==0);
+    picojson::value av1;
+    assert(Parse("{\"url\":\"https://video.test/av1.mkv\",\"name\":\"AV1 720p\"}",av1));
+    s_sources.clear();s_sources.push_back(av1);
+    assert(!NuvioNativePlaybackSource(0,&playable));
+    assert(std::strcmp(NuvioNativeLastError(),UnsupportedMessage())==0);
+    // Restore HEVC to verify the configured conversion path still works below.
+    s_sources.clear();s_sources.push_back(hdr);
 
     // The conversion job is prepared on the player worker, without HTTP on the UI thread.
     std::FILE *cfg=std::fopen("nuvio.cfg","wb");assert(cfg);
@@ -111,11 +134,28 @@ int main() {
     Reply("/catalog/movie/search/search=hello%20world.json?config=a%2Fb",200,
         "{\"metas\":[{\"id\":\"tt42\",\"name\":\"Found\",\"releaseInfo\":\"2025\"}]}");
     assert(Catalog(0,"hello world").find("Found")!=std::string::npos);
+    NuvioHttpData searchResult;
+    assert(NuvioNativeGet("/search.tsv?q=hello%20world",250000,&searchResult));
+    assert(std::strstr((char*)searchResult.bytes,"Found")!=NULL);
+    assert(s_art.size()==1&&s_art[0].id=="tt42");
+    delete[] searchResult.bytes;
+    assert(Catalog(0,"")==catalog&&s_art[0].id=="tmdb:42");
+    picojson::value legacySearch;
+    assert(Parse("{\"extraRequired\":[\"search\"]}",legacySearch));
+    assert(HasExtra(legacySearch,"search")&&!RequiresFilter(legacySearch,true));
+    const picojson::value savedManifest=s_addons[0].manifest;
+    assert(Parse("{\"catalogs\":[{\"type\":\"movie\",\"id\":\"trending\"}]}",s_addons[0].manifest));
+    Reply("https://catalog.nuvio.tv/manifest.json",200,manifest);
+    Reply("https://catalog.nuvio.tv/catalog/movie/search/search=fallback.json",200,
+        "{\"metas\":[{\"id\":\"tt99\",\"name\":\"Fallback result\"}]}");
+    assert(Catalog(0,"fallback").find("Fallback result")!=std::string::npos);
+    s_addons[0].manifest=savedManifest;
     // Failed cloud writes never turn the displayed addon off.
     Rows(); Reply("sync_push_addons",503,"{}");
     assert(ChangeAddon("toggle",1,"").empty() && s_addons[0].enabled);
     Rows(); Reply("sync_push_addons",200,"{}");
     assert(ChangeAddon("toggle",1,"")=="OK\n" && !s_addons[0].enabled);
+    assert(s_catalogCache.empty()&&s_imageCache.empty());
     picojson::value payload;
     assert(Parse(lastPayload,payload));
     const picojson::array &pushed=Field(payload,"p_addons").get<picojson::array>();
@@ -159,6 +199,7 @@ int main() {
     assert(s_addons.empty());
     assert(pending.empty());
     ClearProfileData();
+    assert(s_catalogCache.empty()&&s_imageCache.empty());
     assert(s_addons.empty() && s_art.empty() && !s_profileAllowed[1]);
     std::puts("PASS: cloud owner, profiles, inheritance, configured URLs, TMDB, rails, search, write rollback, library, default catalog, credentials isolation");
     return 0;

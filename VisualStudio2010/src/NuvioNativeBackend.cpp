@@ -6,6 +6,7 @@
 #include "NuvioNativeBackend.h"
 #include "NuvioNetwork.h"
 #include "NuvioPlayback.h"
+#include "StreamCompat.h"
 #include "Http.h"
 #if defined(_MSC_VER) && _MSC_VER < 1900
 // picojson's current header uses C++11 noexcept; XDK/VS2010 speaks C++03.
@@ -53,6 +54,14 @@ static bool RefreshToken();
 
 struct Art { std::string id, poster, background, kind, title, base, description; picojson::value metadata; };
 static std::vector<Art> s_art;
+struct CatalogCacheEntry {
+    int profile,page;unsigned long stamp;
+    std::string query,body;std::vector<Art> art;
+};
+struct ImageCacheEntry {std::string key,data;unsigned long stamp;};
+static std::vector<CatalogCacheEntry> s_catalogCache;
+static std::vector<ImageCacheEntry> s_imageCache;
+static void ClearCatalogCache() {s_catalogCache.clear();s_imageCache.clear();}
 struct CloudAddon {
     std::string base, name;
     bool enabled;
@@ -72,6 +81,7 @@ static std::string Canonical(const std::string &input);
 static std::string AddonUrl(const std::string &base, const std::string &path);
 static void LoadManifest(CloudAddon &a);
 static void ClearProfileData() {
+    ClearCatalogCache();
     s_sources.clear();
     s_art.clear(); s_addons.clear(); s_owner.clear();
     s_profile = s_addonProfile = 0;
@@ -587,12 +597,55 @@ static bool Provides(const picojson::value &manifest, const char *resource, cons
 }
 
 // Known incompatible sources should fail before metadata download/decoder allocation.
+static StreamCompat StreamSupportHint(const picojson::value &stream) {
+    return ClassifyStream(AsString(Field(stream,"name"))+" "+
+                          AsString(Field(stream,"title"))+" "+
+                          AsString(Field(stream,"description")));
+}
 static bool UnsupportedVideo(const picojson::value &stream) {
-    std::string hint=AsString(Field(stream,"name"))+" "+AsString(Field(stream,"title"))+" "+AsString(Field(stream,"description"));
-    for(size_t i=0;i<hint.size();++i)if(hint[i]>='A'&&hint[i]<='Z')hint[i]+='a'-'A';
-    const char *tokens[]={"2160","1080","4k","8k","hevc","h.265","h265","x265","av1","dolby vision","hdr"};
-    for(size_t i=0;i<sizeof(tokens)/sizeof(tokens[0]);++i)if(hint.find(tokens[i])!=std::string::npos)return true;
+    return StreamSupportHint(stream).support==STREAM_UNSUPPORTED;
+}
+
+// A language tag is optional in a stream addon; never guess a country if absent.
+static bool LanguageWord(const std::string &s, const char *word) {
+    size_t n=std::strlen(word),at=0;
+    while((at=s.find(word,at))!=std::string::npos) {
+        bool left=at==0||!((s[at-1]>='a'&&s[at-1]<='z')||(s[at-1]>='0'&&s[at-1]<='9'));
+        size_t end=at+n;
+        bool right=end==s.size()||!((s[end]>='a'&&s[end]<='z')||(s[end]>='0'&&s[end]<='9'));
+        if(left&&right)return true;
+        ++at;
+    }
     return false;
+}
+static std::string SourceLanguageCountry(const picojson::value &stream) {
+    const picojson::value &hints=Field(stream,"behaviorHints");
+    std::string tag=AsString(Field(stream,"language"));
+    if(tag.empty())tag=AsString(Field(stream,"audioLanguage"));
+    if(tag.empty())tag=AsString(Field(hints,"language"));
+    const picojson::value *lists[]={&Field(stream,"audioLanguages"),&Field(stream,"languages"),&Field(hints,"audioLanguages")};
+    for(int i=0;i<3&&tag.empty();++i)if(lists[i]->is<picojson::array>()) {
+        const picojson::array &a=lists[i]->get<picojson::array>();
+        if(!a.empty())tag=AsString(a[0]);
+    }
+    const bool explicitTag=!tag.empty();
+    if(!explicitTag)tag=AsString(Field(stream,"name"))+" "+AsString(Field(stream,"title"));
+    for(size_t i=0;i<tag.size();++i)if(tag[i]>='A'&&tag[i]<='Z')tag[i]+='a'-'A';
+    if(LanguageWord(tag,"pt-br")||LanguageWord(tag,"pt_br")||LanguageWord(tag,"brazilian")||
+       LanguageWord(tag,"brasil")||LanguageWord(tag,"dublado"))return "BR";
+    if(LanguageWord(tag,"pt-pt"))return "PT";
+    if(LanguageWord(tag,"en-us")||LanguageWord(tag,"en")||LanguageWord(tag,"eng")||
+       LanguageWord(tag,"english"))return "US";
+    if(LanguageWord(tag,"es")||LanguageWord(tag,"esp")||LanguageWord(tag,"spanish")||
+       LanguageWord(tag,"espanol"))return "ES";
+    if(LanguageWord(tag,"ja")||LanguageWord(tag,"jpn")||LanguageWord(tag,"japanese"))return "JP";
+    if(LanguageWord(tag,"fr")||LanguageWord(tag,"fre")||LanguageWord(tag,"french"))return "FR";
+    if(LanguageWord(tag,"de")||LanguageWord(tag,"ger")||LanguageWord(tag,"german"))return "DE";
+    if(LanguageWord(tag,"ko")||LanguageWord(tag,"kor")||LanguageWord(tag,"korean"))return "KR";
+    if(LanguageWord(tag,"it")||LanguageWord(tag,"ita")||LanguageWord(tag,"italian"))return "IT";
+    if(LanguageWord(tag,"pt")||LanguageWord(tag,"por")||LanguageWord(tag,"portuguese")||
+       LanguageWord(tag,"portugues"))return "BR";
+    return "--";
 }
 
 static std::string Sources(const std::string &id, int episode) {
@@ -628,12 +681,21 @@ static std::string Sources(const std::string &id, int episode) {
             const bool torrent = !AsString(Field(stream, "infoHash")).empty() ||
                 !AsString(Field(Field(stream,"clientResolve"),"infoHash")).empty() ||
                 !AsString(Field(Field(stream,"clientResolve"),"magnetUri")).empty() ||
-                AsString(Field(stream,"url")).find("magnet:")==0;
+                AsString(Field(stream,"url")).find("magnet:")==0 ||
+                AsString(Field(stream,"url")).find("torrent://")==0 ||
+                AsString(Field(stream,"externalUrl")).find("magnet:")==0 ||
+                AsString(Field(stream,"externalUrl")).find("torrent://")==0;
             const std::string url = AsString(Field(stream, "url"));
             if (!torrent && url.empty() && AsString(Field(stream, "externalUrl")).empty()) continue;
             // Source URLs and provider keys remain off the television and logs.
-            out += SafeText(label, 50) + " | " + SafeText(desc, 85) +
-                (UnsupportedVideo(stream)?" [Requer conversao para 720p H.264]":torrent ? " [Torrent]" : " [Video]") + "\n";
+            const StreamCompat compat=StreamSupportHint(stream);
+            // Leading '! ' is an internal flag for titles shortened for the TV.
+            out += "[" + SourceLanguageCountry(stream) + "] " +
+                (compat.support==STREAM_UNSUPPORTED?"! ":"") +
+                SafeText(label, 48) + " | " + SafeText(desc, 70) +
+                (compat.support==STREAM_UNSUPPORTED?
+                    std::string(" [Conversao: ")+compat.reason+"]":
+                    torrent ? " [Torrent]" : " [Video]") + "\n";
             ++count;
             s_sources.push_back(stream);
         }
@@ -705,6 +767,7 @@ static bool SelectProfile(int id) {
     s_addonProfile = s_primaryAddons[id] ? 1 : id;
     s_addonsLoaded = s_addonsComplete = false;
     s_addons.clear(); s_art.clear();
+    ClearCatalogCache();
     return true;
 }
 
@@ -735,6 +798,7 @@ static bool PullAddons() {
         loaded.push_back(addon);
     }
     s_addons.swap(loaded);
+    ClearCatalogCache(); // Explicit refresh or addon edits must invalidate old discovery data.
     s_addonsLoaded = true;
     s_addonsComplete = a.size() <= 64;
     return true;
@@ -786,6 +850,7 @@ static bool PushAddons(const std::vector<CloudAddon> &next) {
     if (!Api("POST", "/rest/v1/rpc/sync_push_addons", s_access,
         picojson::value(args).serialize(), reply)) return false;
     s_addons = next;
+    ClearCatalogCache();
     return true;
 }
 
@@ -827,6 +892,11 @@ static bool HasExtra(const picojson::value &catalog, const char *name) {
         const picojson::array &a = supported.get<picojson::array>();
         for (size_t i = 0; i < a.size(); ++i) if (AsString(a[i]) == name) return true;
     }
+    const picojson::value &required=Field(catalog,"extraRequired");
+    if(required.is<picojson::array>()) {
+        const picojson::array &a=required.get<picojson::array>();
+        for(size_t i=0;i<a.size();++i)if(AsString(a[i])==name)return true;
+    }
     return false;
 }
 
@@ -849,6 +919,15 @@ static bool RequiresFilter(const picojson::value &catalog, bool search) {
 static std::string Catalog(int page, const std::string &query) {
     if (s_profile < 1 || !EnsureAuth()) return "";
     if (!s_addonsLoaded && !PullAddons()) return "";
+    const bool search=!query.empty();
+    const unsigned long now=GetTickCount();
+    for(size_t i=0;i<s_catalogCache.size();++i) {
+        const CatalogCacheEntry &cached=s_catalogCache[i];
+        if(cached.profile==s_profile&&cached.page==page&&cached.query==query&&
+            (unsigned long)(now-cached.stamp)<300000) {
+            s_art=cached.art;s_error.clear();return cached.body;
+        }
+    }
     // The default catalog is a local fallback, never silently pushed to the account.
     std::vector<CloudAddon> sources = s_addons;
     bool hasCatalog = false, officialInstalled = false;
@@ -857,7 +936,12 @@ static std::string Catalog(int page, const std::string &query) {
         if (!sources[i].enabled) continue;
         LoadManifest(sources[i]);
         const picojson::value &cs = Field(sources[i].manifest, "catalogs");
-        if (cs.is<picojson::array>() && !cs.get<picojson::array>().empty()) hasCatalog = true;
+        if(cs.is<picojson::array>()) {
+            const picojson::array &descriptors=cs.get<picojson::array>();
+            for(size_t c=0;c<descriptors.size();++c)
+                if(!RequiresFilter(descriptors[c],search)&&(!search||HasExtra(descriptors[c],"search")))
+                    hasCatalog=true;
+        }
     }
     if (sources.empty() || (!hasCatalog && !officialInstalled)) {
         CloudAddon a; a.base = kDefaultCatalog; a.enabled = true; sources.push_back(a);
@@ -865,7 +949,6 @@ static std::string Catalog(int page, const std::string &query) {
     std::vector<Art> art;
     std::string out = "#catalog\n";
     int rails = 0, attempted = 0, succeeded = 0;
-    const bool search = !query.empty();
     for (size_t source = 0; source < sources.size() && rails < 24 && art.size() < 240; ++source) {
         CloudAddon &addon = sources[source];
         if (!addon.enabled) continue;
@@ -926,6 +1009,14 @@ static std::string Catalog(int page, const std::string &query) {
     }
     if (!succeeded && attempted > 0) { Error("Addon catalogs unavailable. Press X to retry."); return ""; }
     s_art.swap(art);
+    CatalogCacheEntry cached;cached.profile=s_profile;cached.page=page;
+    cached.query=query;cached.body=out;cached.art=s_art;cached.stamp=GetTickCount();
+    for(size_t i=0;i<s_catalogCache.size();++i)
+        if(s_catalogCache[i].profile==s_profile&&s_catalogCache[i].page==page&&s_catalogCache[i].query==query) {
+            s_catalogCache.erase(s_catalogCache.begin()+i);break;
+        }
+    if(s_catalogCache.size()>=3)s_catalogCache.erase(s_catalogCache.begin());
+    s_catalogCache.push_back(cached);
     return out;
 }
 
@@ -936,6 +1027,11 @@ static Art *Artwork(const std::string &id) {
 
 static std::string Image(const std::string &url, int width, int height, bool roundAvatar) {
     if (url.compare(0, 8, "https://") != 0) return "";
+    char dimensions[50];std::sprintf(dimensions,"|%dx%d|%d",width,height,roundAvatar?1:0);
+    const std::string cacheKey=url+dimensions;
+    for(size_t i=0;i<s_imageCache.size();++i)
+        if(s_imageCache[i].key==cacheKey&&(unsigned long)(GetTickCount()-s_imageCache[i].stamp)<300000)
+            return s_imageCache[i].data;
 #ifndef NUVIO_BACKEND_TEST
     MEMORYSTATUS memory; GlobalMemoryStatus(&memory);
     if(memory.dwAvailPhys<32*1024*1024)return "";
@@ -944,7 +1040,7 @@ static std::string Image(const std::string &url, int width, int height, bool rou
     if (url.find("https://image.tmdb.org/t/p/")==0) {
         const size_t begin=27, slash=url.find('/',begin);
         if (slash!=std::string::npos)
-            resized=url.substr(0,begin)+(width>400?"w780":"w185")+url.substr(slash);
+            resized=url.substr(0,begin)+(width>800?"w1280":width>185?"w342":"w185")+url.substr(slash);
     }
     const Http::Response result = Http::Get(resized, "User-Agent: NUVIO\r\n", 4500);
     if (result.status != 200 || result.body.empty() || result.body.size() > 1500000) return "";
@@ -960,20 +1056,44 @@ static std::string Image(const std::string &url, int width, int height, bool rou
     data[4] = (char)width; data[5] = (char)(width >> 8);
     data[6] = (char)height; data[7] = (char)(height >> 8);
     unsigned char *dst = (unsigned char*)&data[8];
+    // Bilinear filtering prevents visibly blocky posters and hero backdrops.
+    // 8-bit fixed-point weights keep this compatible with the Xbox 360 XDK.
     for (int y = 0; y < height; ++y) {
-        const int sy = (y * ih) / height;
+        int py=((2*y+1)*ih*128)/height-128;
+        if(py<0)py=0;
+        int y0=py>>8,wy=py&255;
+        if(y0>=ih-1){y0=ih-1;wy=0;}
+        const int y1=y0+1<ih?y0+1:y0;
         for (int x = 0; x < width; ++x) {
-            const int sx = (x * iw) / width;
-            std::memcpy(dst + (y * width + x) * 4, rgba + (sy * iw + sx) * 4, 4);
+            int px=((2*x+1)*iw*128)/width-128;
+            if(px<0)px=0;
+            int x0=px>>8,wx=px&255;
+            if(x0>=iw-1){x0=iw-1;wx=0;}
+            const int x1=x0+1<iw?x0+1:x0;
+            const unsigned char *p00=rgba+(y0*iw+x0)*4;
+            const unsigned char *p10=rgba+(y0*iw+x1)*4;
+            const unsigned char *p01=rgba+(y1*iw+x0)*4;
+            const unsigned char *p11=rgba+(y1*iw+x1)*4;
+            const int w00=(256-wx)*(256-wy),w10=wx*(256-wy);
+            const int w01=(256-wx)*wy,w11=wx*wy;
+            unsigned char *pixel=dst+(y*width+x)*4;
+            for(int c=0;c<4;++c)
+                pixel[c]=(unsigned char)((p00[c]*w00+p10[c]*w10+p01[c]*w01+p11[c]*w11+32768)>>16);
             if (roundAvatar) {
                 const int dx = 2 * x + 1 - width;
                 const int dy = 2 * y + 1 - height;
-                if (dx * dx + dy * dy > width * width)
-                    dst[(y * width + x) * 4 + 3] = 0;
+                if (dx * dx + dy * dy > width * width) pixel[3] = 0;
             }
         }
     }
     stbi_image_free(rgba);
+    size_t cacheBytes=data.size();
+    for(size_t i=0;i<s_imageCache.size();++i)cacheBytes+=s_imageCache[i].data.size();
+    while(!s_imageCache.empty()&&(cacheBytes>6*1024*1024||s_imageCache.size()>=16)) {
+        cacheBytes-=s_imageCache.front().data.size();s_imageCache.erase(s_imageCache.begin());
+    }
+    ImageCacheEntry cached;cached.key=cacheKey;cached.data=data;cached.stamp=GetTickCount();
+    s_imageCache.push_back(cached);
     return data;
 }
 
@@ -987,7 +1107,7 @@ static std::string Preview(const std::string &id, bool bitmap) {
     const std::string url = AddonUrl(a->base, "/meta/" + a->kind + "/" + Encode(id) + ".json");
     if(a->metadata.is<picojson::object>())metadata=a->metadata;
     else if (!HttpJson(url, metadata)) {
-        if (bitmap) return Image(a->background, 640, 360, false);
+        if (bitmap) return Image(a->background, 960, 540, false);
         return "\n\n\n" + SafeText(a->description, 380) + "\n";
     }
     a->metadata=metadata;
@@ -995,7 +1115,7 @@ static std::string Preview(const std::string &id, bool bitmap) {
     if (bitmap) {
         std::string background = AsString(Field(m, "background"));
         if (background.empty()) background = a->background;
-        return Image(background, 640, 360, false);
+        return Image(background, 960, 540, false);
     }
     std::string genres;
     const picojson::value &g = Field(m, "genres").is<picojson::array>()?Field(m,"genres"):Field(m, "genre");
@@ -1018,6 +1138,11 @@ static std::string Preview(const std::string &id, bool bitmap) {
 bool NuvioNativePlaybackSource(int index,NuvioPlaybackSource *source) {
     if(!source || index<0 || index>=(int)s_sources.size())return false;
     const picojson::value &stream=s_sources[index];
+    const StreamCompat hint=StreamSupportHint(stream);
+    // DRM cannot be fixed by ordinary container remuxing or transcoding.
+    if(hint.support==STREAM_UNSUPPORTED && std::strcmp(hint.reason,"Protecao DRM")==0) {
+        Error("Stream protegido por DRM; escolha uma fonte sem protecao.");return false;
+    }
     source->url=AsString(Field(stream,"url"));
     source->name=AsString(Field(stream,"name"));
     source->headers.clear();source->prepareBody.clear();
@@ -1025,7 +1150,33 @@ bool NuvioNativePlaybackSource(int index,NuvioPlaybackSource *source) {
     std::string hash=AsString(Field(stream,"infoHash"));
     if(hash.empty())hash=AsString(Field(resolve,"infoHash"));
     std::string magnet=AsString(Field(resolve,"magnetUri"));
-    if(source->url.find("magnet:")==0)magnet=source->url;
+    const std::string external=AsString(Field(stream,"externalUrl"));
+    if(source->url.find("magnet:?")==0)magnet=source->url;
+    else if(source->url.empty()&&external.find("magnet:?")==0)magnet=external;
+    // Nuvio streams may encode a v1 hash and zero-based file index as:
+    // torrent://<40-hex-or-32-base32-hash>/<fileIdx>
+    int torrentFileIndex=-1;
+    std::string torrentUri=source->url.find("torrent://")==0?source->url:source->url.empty()?external:"";
+    if(torrentUri.find("torrent://")==0) {
+        std::string path=torrentUri.substr(10);
+        size_t sep=path.find_first_of("/?");
+        std::string id=path.substr(0,sep);
+        bool valid=id.size()==40||id.size()==32;
+        for(size_t c=0;c<id.size()&&valid;++c) {
+            char x=id[c];
+            if(id.size()==40)valid=(x>='0'&&x<='9')||(x>='a'&&x<='f')||(x>='A'&&x<='F');
+            else valid=(x>='2'&&x<='7')||(x>='a'&&x<='z')||(x>='A'&&x<='Z');
+        }
+        if(!valid){Error("Hash torrent:// invalido.");return false;}
+        if(hash.empty())hash=id;
+        if(sep!=std::string::npos&&path[sep]=='/') {
+            std::string selected=path.substr(sep+1);
+            selected=selected.substr(0,selected.find('?'));
+            char *end=NULL;long idx=std::strtol(selected.c_str(),&end,10);
+            if(selected.empty()||*end||idx<0||idx>2047){Error("Indice torrent:// invalido.");return false;}
+            torrentFileIndex=(int)idx;
+        }
+    }
     if(magnet.empty()&&!hash.empty())magnet="magnet:?xt=urn:btih:"+hash;
     if(!magnet.empty()) {
         std::string server;
@@ -1045,6 +1196,7 @@ bool NuvioNativePlaybackSource(int index,NuvioPlaybackSource *source) {
             Error("Endereco torrent_server invalido em nuvio.cfg.");return false;
         }
         int file=AsInt(Field(stream,"fileIdx"),AsInt(Field(resolve,"fileIdx"),-1));
+        if(file<0)file=torrentFileIndex;
         const picojson::value *lists[]={&Field(stream,"sources"),&Field(resolve,"sources")};
         for(int l=0;l<2;++l)if(lists[l]->is<picojson::array>()) {
             const picojson::array &items=lists[l]->get<picojson::array>();
@@ -1109,7 +1261,7 @@ bool NuvioNativePlaybackSource(int index,NuvioPlaybackSource *source) {
         source->url=converter+"/v1/jobs";
         source->headers="Authorization: Bearer "+token+"\r\nContent-Type: application/json\r\n";
     } else if(UnsupportedVideo(stream)) {
-        Error("Fonte requer conversao. Configure transcode_server/token ou escolha 720p H.264/AVC sem HDR.");return false;
+        Error(UnsupportedMessage());return false;
     }
     return true;
 }
@@ -1229,7 +1381,7 @@ bool NuvioNativeGet(const char *path, int maxBody, NuvioHttpData *out) {
     else if (p.find("/search.tsv?q=") == 0) body = Catalog(0, Decode(p.substr(14)));
     else if (p.find("/poster/") == 0 && p.find(".rgba") != std::string::npos) {
         Art *a = Artwork(p.substr(8, p.size() - 13));
-        if (a) body = Image(a->poster, 160, 240, false);
+        if (a) body = Image(a->poster, 192, 288, false);
     }
     else if (p.find("/preview/") == 0 && p.size() > 17) {
         const bool bitmap = p.find(".rgba") != std::string::npos;

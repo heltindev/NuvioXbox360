@@ -22,6 +22,17 @@ int main(int argc,char **argv) {
     std::string prefix="d8:msg_typei1e5:piecei0e10:total_sizei3eeabc";size_t used=0;
     Value header;assert(Parser(prefix).Parse(header,&used)&&prefix.substr(used)=="abc");
     std::string error;NuvioTorrent invalid;assert(!invalid.Open("magnet:?xt=urn:btmh:bad",error));
+    // Keep magnets without tracker lists discoverable, but never leak a
+    // tracker-specific/private magnet to the public fallback trackers.
+    std::vector<std::string> fallback;
+    AddFallbackTrackers(fallback);
+    assert(fallback.size()==4);
+    assert(fallback[0].find("udp://")==0);
+    std::vector<std::string> privateTrackers(1,"udp://127.0.0.1:19001/announce");
+    AddFallbackTrackers(privateTrackers);
+    assert(privateTrackers.size()==1);
+    assert(privateTrackers[0]=="udp://127.0.0.1:19001/announce");
+    assert(NuvioTorrentClearCache()); // host implementation does not touch disk
     std::puts("PASS: SHA1, bounded bencode, magnet parsing");
     if(argc<3)return 0;
     WSADATA wsa;assert(WSAStartup(MAKEWORD(2,2),&wsa)==0);

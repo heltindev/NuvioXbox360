@@ -26,6 +26,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\StreamCompat.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="src\NuvioApp.h">
       <Filter>Header Files</Filter>
     </ClInclude>

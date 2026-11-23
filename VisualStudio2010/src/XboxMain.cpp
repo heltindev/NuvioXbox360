@@ -14,6 +14,8 @@
 #include "NuvioGraphics.h"
 #include "NuvioInput.h"
 #include "NuvioPlayback.h"
+#include "StreamCompat.h"
+#include "NuvioTorrent.h"
 #include "FFPlayer.h"
 #include <vector>
 #include <string>
@@ -27,6 +29,27 @@ enum {
 };
 
 static const char *kProfilesFile = "game:\\nuvio_profiles.cfg";
+static const char *kP2PConfigFile = "game:\\nuvio_p2p.cfg";
+static bool g_p2pEnabled = true;
+static bool g_hideTorrentStats = false;
+static bool g_playingTorrent = false;
+static void LoadP2PSettings() {
+    std::FILE *file=std::fopen(kP2PConfigFile,"rb");
+    if(!file)return;
+    char line[80];
+    while(std::fgets(line,sizeof(line),file)) {
+        if(!std::strncmp(line,"enabled=",8))g_p2pEnabled=line[8]=='1';
+        if(!std::strncmp(line,"hide_stats=",11))g_hideTorrentStats=line[11]=='1';
+    }
+    std::fclose(file);
+}
+static bool SaveP2PSettings() {
+    std::FILE *file=std::fopen(kP2PConfigFile,"wb");
+    if(!file)return false;
+    bool saved=std::fprintf(file,"enabled=%d\nhide_stats=%d\n",g_p2pEnabled?1:0,g_hideTorrentStats?1:0)>0;
+    if(std::fclose(file)!=0)saved=false;
+    return saved;
+}
 
 // Color palette - dark streaming theme
 static const D3DCOLOR BG_DARK      = D3DCOLOR_ARGB(255, 13, 13, 13);
@@ -47,10 +70,79 @@ static inline D3DCOLOR Color(int r, int g, int b, int a = 255) {
     return D3DCOLOR_ARGB(a, r, g, b);
 }
 
+// Xbox face buttons use their standard colors even with the ASCII-only atlas.
+static D3DCOLOR PadColor(char b) {
+    if(b=='A')return Color(66,178,77);
+    if(b=='B')return Color(215,58,64);
+    if(b=='X')return Color(46,137,211);
+    if(b=='Y')return Color(235,188,44);
+    return TEXT_DIM;
+}
+static bool PadButton(char b) {return b=='A'||b=='B'||b=='X'||b=='Y';}
+static void DrawPadHint(NuvioGraphics &g,float x,float y,char button,const char *label) {
+    g.Circle(x+12,y+13,13,Color(14,14,14));
+    g.Circle(x+12,y+12,11,PadColor(button));
+    g.CenteredGlyph(x+12,y+12,15,button,TEXT_WHITE);
+    g.Text(x+31,y+4,16,label,TEXT_MUTED,230);
+}
+static void DrawControllerFooter(NuvioGraphics &g,float x,float y,const char *hints) {
+    const char *p=hints;
+    while(*p&&x<SCREEN_WIDTH-45) {
+        while(*p==' ')++p;
+        if(!*p)break;
+        const char *next=std::strstr(p,"  ");
+        size_t n=next?(size_t)(next-p):std::strlen(p);
+        char part[128];if(n>=sizeof(part))n=sizeof(part)-1;
+        std::memcpy(part,p,n);part[n]=0;
+        if(n>2&&part[1]==':'&&PadButton(part[0])) {
+            DrawPadHint(g,x,y,part[0],part+2);
+            x+=31+(float)std::strlen(part+2)*8.3f+20;
+        } else {
+            g.Text(x,y+4,16,part,TEXT_DIM,SCREEN_WIDTH-x-12);
+            x+=(float)n*8.3f+20;
+        }
+        p=next?next+2:p+std::strlen(p);
+    }
+}
+// Language is inferred only from addon metadata; unknown languages stay neutral.
+static void DrawLanguageFlag(NuvioGraphics &g,float x,float y,const char *country) {
+    g.RoundedRect(x-2,y-2,54,34,6,Color(74,74,74));
+    g.Rect(x,y,50,30,Color(51,51,51));
+    if(!std::strcmp(country,"BR")) {
+        g.Rect(x,y,50,30,Color(24,145,61));
+        g.Rect(x+10,y+6,30,18,Color(247,204,48));
+        g.Circle(x+25,y+15,8,Color(37,83,181));
+    } else if(!std::strcmp(country,"US")) {
+        g.Rect(x,y,50,30,Color(250,250,250));
+        for(int i=0;i<7;++i)g.Rect(x,y+i*4.3f,50,2.4f,Color(196,47,54));
+        g.Rect(x,y,23,16,Color(47,65,140));
+    } else if(!std::strcmp(country,"ES")) {
+        g.Rect(x,y,50,30,Color(183,32,47));g.Rect(x,y+8,50,14,Color(255,201,43));
+    } else if(!std::strcmp(country,"JP")) {
+        g.Rect(x,y,50,30,Color(250,250,250));g.Circle(x+25,y+15,9,Color(188,30,63));
+    } else if(!std::strcmp(country,"FR")||!std::strcmp(country,"IT")) {
+        const bool it=country[0]=='I';
+        g.Rect(x,y,17,30,it?Color(11,143,86):Color(38,59,149));
+        g.Rect(x+17,y,16,30,Color(250,250,250));
+        g.Rect(x+33,y,17,30,it?Color(205,42,52):Color(228,51,62));
+    } else if(!std::strcmp(country,"DE")) {
+        g.Rect(x,y,50,10,Color(15,15,15));
+        g.Rect(x,y+10,50,10,Color(211,36,42));
+        g.Rect(x,y+20,50,10,Color(248,202,44));
+    } else if(!std::strcmp(country,"PT")) {
+        g.Rect(x,y,21,30,Color(22,111,73));g.Rect(x+21,y,29,30,Color(202,43,51));
+        g.Circle(x+21,y+15,7,Color(234,198,54));
+    } else if(!std::strcmp(country,"KR")) {
+        g.Rect(x,y,50,30,Color(250,250,250));g.Circle(x+25,y+13,8,Color(207,46,61));
+        g.Rect(x+17,y+15,16,7,Color(38,76,168));
+    } else g.Text(x+13,y+5,17,"--",TEXT_MUTED);
+}
+
 // Shared data (kept off the stack: the catalog alone is ~150 KB)
 static NuvioCatalog g_catalog;
 static FFPlayer *g_player=NULL;
 static DWORD g_playerInputAt=0;
+static DWORD g_playerReadyAt=0;
 static NuvioAddonList g_addons;
 static char g_status[120] = "";
 static int g_controllerPort = -1; // -1 means no controller reported by XInput
@@ -390,7 +482,7 @@ static void DrawQrLoginScreen(NuvioGraphics &g, const NuvioState &state) {
     }
 
     // Bottom hint
-    g.Text(44, SCREEN_HEIGHT - 40, 17, "A: Retry     B: Back", TEXT_DIM);
+    DrawControllerFooter(g,44,SCREEN_HEIGHT-40,"A: Retry     B: Back");
     g.Text(1150, SCREEN_HEIGHT - 40, 12, "v0.9", TEXT_DIM);
 }
 
@@ -427,7 +519,7 @@ static void DrawLoginScreen(NuvioGraphics &g, const NuvioState &state, bool onli
         }
     }
     g.Text(90, SCREEN_HEIGHT - 36, 13, "NUVIO", TEXT_DIM);
-    g.Text(735, SCREEN_HEIGHT - 40, 16, "A: Connect    B: Back", TEXT_DIM);
+    DrawControllerFooter(g,735,SCREEN_HEIGHT-40,"A: Connect    B: Back");
 }
 
 // ============ PROFILE SELECTION ============
@@ -472,8 +564,7 @@ static void DrawProfileScreen(NuvioGraphics &g, const NuvioState &state, bool on
     }
 
     DrawStatusLine(g, 624);
-    g.Text(40, SCREEN_HEIGHT - 40, 16,
-           "Left/Right: Choose    A: Select    X: Remove profile    B: Back", TEXT_DIM);
+    DrawControllerFooter(g,40,SCREEN_HEIGHT-40,"Left/Right: Choose    A: Select    X: Remove profile    B: Back");
 }
 
 // ============ VIRTUAL KEYBOARD ============
@@ -556,25 +647,26 @@ static void DrawCreateProfileScreen(NuvioGraphics &g, const NuvioState &state) {
 
     DrawKeyboard(g, state, 262);
     DrawStatusLine(g, 645);
-    g.Text(110, SCREEN_HEIGHT - 36, 16,
-           "A: Type    X: Delete    Y: Space    LB/RB: Shift    Start: Create    B: Cancel", TEXT_DIM);
+    DrawControllerFooter(g,110,SCREEN_HEIGHT-36,"A: Type    X: Delete    Y: Space    LB/RB: Shift    Start: Create    B: Cancel");
 }
 
 // ============ SIDEBAR ============
 static void DrawSidebar(NuvioGraphics &g, const NuvioState &state) {
+    // Exactly four navigation destinations, matching Nuvio's desktop sidebar.
     const bool expanded=state.sidebarFocused;
-    const float width=expanded?260.0f:88.0f;
+    const float width=expanded?248.0f:80.0f;
     g.Rect(0,0,width,720,Color(13,13,13));
-    if(g.HasAvatar(state.profileIndex))g.Avatar(state.profileIndex,24,24,40);
-    else {g.Circle(44,44,20,Color(65,65,65));g.Text(35,29,24,"N",TEXT_WHITE);}
-    if(expanded)g.Text(82,31,22,state.profileName,TEXT_WHITE,170);
-    const char *labels[]={"Inicio","Filmes e series","Busca","Biblioteca","Configuracoes"};
-    for(int i=0;i<5;++i) {
-        const float y=222.0f+i*76.0f;
+    if(g.HasAvatar(state.profileIndex))g.Avatar(state.profileIndex,22,40,37);
+    else {g.Circle(41,59,19,Color(65,65,65));g.Text(33,45,23,"N",TEXT_WHITE);}
+    if(expanded)g.Text(76,44,21,state.profileName,TEXT_WHITE,165);
+    const char *labels[]={"Inicio","Busca","Biblioteca","Configuracoes"};
+    const int iconIndex[]={0,2,3,4}; // Native atlas: home, search, library, settings.
+    for(int i=0;i<4;++i) {
+        const float y=278.0f+i*51.0f;
         const bool active=state.sidebarItem==i;
-        if(active)g.RoundedRect(14,y-10,expanded?232.0f:60.0f,60,16,expanded?TEXT_WHITE:Color(35,35,35));
-        g.Icon(i,24,y,40,active&&expanded?BG_DARK:active?TEXT_WHITE:TEXT_DIM);
-        if(expanded)g.Text(84,y+7,21,labels[i],active?BG_DARK:TEXT_MUTED,165);
+        if(active)g.RoundedRect(17,y-4,expanded?217.0f:46.0f,44,12,TEXT_WHITE);
+        g.Icon(iconIndex[i],27,y+5,25,active?BG_DARK:Color(149,154,160));
+        if(expanded)g.Text(78,y+7,20,labels[i],active?BG_DARK:TEXT_MUTED,155);
     }
 }
 
@@ -593,29 +685,42 @@ static void DrawWrapped(NuvioGraphics &g,float x,float y,float size,const char *
     }
 }
 static void DrawPosterCard(NuvioGraphics &g,const NuvioCatalog &catalog,int index,
-                          float x,float y,bool focused,bool) {
+                           float x,float y,bool focused,bool) {
     if(index<0||index>=catalog.count)return;
     const NuvioCatalogItem &item=catalog.items[index];
-    const float w=180,h=240;
-    if(focused)g.Rect(x-3,y-3,w+6,h+6,TEXT_WHITE);
-    if(g.HasPoster(index))g.Poster(index,x,y,w,h);
-    else {g.Rect(x,y,w,h,Color(28,28,28));g.Text(x+14,y+104,14,"Nuvio",TEXT_DIM);}
+    const float w=180,h=240,r=13;
+    if(focused)g.RoundedRect(x-3,y-3,w+6,h+6,r+3,TEXT_WHITE);
+    if(g.HasPoster(index))g.PosterRounded(index,x,y,w,h,r,BG_DARK);
+    else {
+        g.RoundedRect(x,y,w,h,r,Color(28,28,28));
+        g.Logo(x+71,y+89,45);
+    }
     g.Text(x,y+h+8,17,item.title,TEXT_WHITE,w);
     if(item.year){char year[12];std::sprintf(year,"%d",item.year);g.Text(x,y+h+31,14,year,TEXT_DIM);}
 }
 static void DrawHeroBanner(NuvioGraphics &g,const NuvioCatalog &catalog,int index) {
     if(index<0||index>=catalog.count)return;
     const NuvioCatalogItem &item=catalog.items[index];
-    if(g.HasBackdrop()&&g_previewIndex==index)g.Backdrop(88,0,1192,365);
-    else g.Rect(88,0,1192,365,Color(17,17,17));
-    for(int i=0;i<16;++i)g.Rect(88+i*64.0f,0,64,365,Color(13,13,13,220-i*11));
-    for(int i=0;i<8;++i)g.Rect(88,285+i*10.0f,1192,10,Color(13,13,13,35+i*28));
-    g.Text(112,100,38,item.title,TEXT_WHITE,1010);
-    char meta[160];std::sprintf(meta,"%s  |  %d  %s  %s",item.type=='S'?"Series":"Filme",item.year,
+    // Large cinematic backdrop with soft left and bottom fades for readable details.
+    if(g.HasBackdrop()&&g_previewIndex==index)g.Backdrop(80,0,1200,625);
+    else g.Rect(80,0,1200,625,Color(17,17,17));
+    for(int i=0;i<24;++i)
+        g.Rect(80+i*50.0f,0,50,625,Color(13,13,13,i<18?236-i*13:0));
+    for(int i=0;i<24;++i)
+        g.Rect(80,330+i*13.0f,1200,13,Color(13,13,13,12+i*10));
+    g.Text(112,258,54,item.title,TEXT_WHITE,1050);
+    char meta[160];
+    std::sprintf(meta,"%s  |  %d  %s  %s",item.type=='S'?"Series":"Filme",item.year,
         g_previewIndex==index?g_preview.runtime:"",g_previewIndex==index?g_preview.genres:"");
-    g.Text(112,158,17,meta,TEXT_MUTED,1000);
-    if(g_previewIndex==index)DrawWrapped(g,112,196,18,g_preview.description,90,3);
-    g.RoundedRect(112,292,158,40,20,TEXT_WHITE);g.Text(130,301,18,"A  Ver detalhes",BG_DARK);
+    g.Text(112,335,19,meta,TEXT_WHITE,1050);
+    if(g_previewIndex==index)DrawWrapped(g,112,385,19,g_preview.description,78,3);
+    g.RoundedRect(112,508,166,43,22,TEXT_WHITE);
+    g.Text(131,518,19,"Ver detalhes",BG_DARK);
+    // A few restrained indicators echo the original featured-content carousel.
+    for(int i=0;i<7;++i) {
+        if(i==0)g.RoundedRect(1082+i*23.0f,558,28,7,4,TEXT_WHITE);
+        else g.Circle(1095+i*23.0f,561,4,Color(221,221,221));
+    }
 }
 
 // ============ ROW SECTION ============
@@ -656,7 +761,7 @@ static void DrawHomeScreen(NuvioGraphics &g,const NuvioState &state,const NuvioC
     const int hero=NuvioCatalogIndexForRow(&catalog,row,state.selectedColumn);
     if(row==0)DrawHeroBanner(g,catalog,hero);
     else g.Text(112,32,30,"Inicio",TEXT_WHITE);
-    DrawRowSection(g,catalog,state,row,rail.name,rail.start,rail.count,row==0?407:115);
+    DrawRowSection(g,catalog,state,row,rail.name,rail.start,rail.count,row==0?650:115);
     if(row>0&&row+1<catalog.railCount) {
         const NuvioCatalogRail &next=catalog.rails[row+1];
         DrawRowSection(g,catalog,state,row+1,next.name,next.start,next.count,455);
@@ -680,7 +785,7 @@ static void DrawDiscoverScreen(NuvioGraphics &g,const NuvioState &state,const Nu
     const char *filters[3]={"Filmes","Series","Todos"};
     for(int i=0;i<3;++i) {g.RoundedRect(112+i*146.0f,82,132,36,10,state.catalogMode==i?TEXT_WHITE:BG_CARD);
         g.Text(128+i*146.0f,89,17,filters[i],state.catalogMode==i?BG_DARK:TEXT_MUTED);}
-    g.Text(550,91,15,"Y: trocar filtro    Start: buscar",TEXT_DIM);
+    DrawControllerFooter(g,550,87,"Y: trocar filtro    Start: buscar");
     const int top=(state.selectedRow/2)*2;
     for(int r=0;r<2;++r)for(int c=0;c<5;++c) {
         int index=DiscoverItem(state,catalog,(top+r)*5+c);
@@ -784,13 +889,14 @@ static void DrawSearchScreen(NuvioGraphics &g, const NuvioState &state, bool onl
     }
 
     if (state.searchActive) DrawKeyboard(g, state, 205);
+    else if(g_catalogLoading)g.Text(110,220,24,"Pesquisando filmes e series...",TEXT_MUTED);
     else if (g_catalog.railCount) {
         const int r = state.selectedRow < g_catalog.railCount ? state.selectedRow : 0;
         const NuvioCatalogRail &rail = g_catalog.rails[r];
         DrawRowSection(g, g_catalog, state, r, rail.name, rail.start, rail.count, 245);
     } else g.Text(110, 220, 24, g_catalogLoading ? "Searching addons..." : "No search results", TEXT_MUTED);
     DrawStatusLine(g, 642);
-    g.Text(110, 685, 16, state.searchActive ? "A: Key   X: Delete   Y: Space   Start: Search   B: Back" : "A: Details   B: Edit search   X: Refresh", TEXT_DIM);
+    DrawControllerFooter(g,110,681,state.searchActive ? "A: Key   X: Delete   Y: Space   Start: Search   B: Back" : "A: Details   B: Edit search   X: Refresh");
 }
 
 // ============ LIBRARY SCREEN ============
@@ -807,59 +913,101 @@ static void DrawLibraryScreen(NuvioGraphics &g, const NuvioState &state, bool on
         DrawRowSection(g, g_catalog, state, r, rail.name, rail.start, rail.count, 200);
     } else g.Text(110, 180, 24, g_catalogLoading ? "Loading library..." : "No items saved to this profile", TEXT_MUTED);
     DrawStatusLine(g, 642);
-    g.Text(110, 685, 16, "A: Details   X: Refresh   B: Profiles", TEXT_DIM);
+    DrawControllerFooter(g,110,681,"A: Details   X: Refresh   B: Profiles");
 }
 
 // ============ SETTINGS SCREEN ============
-static void DrawMenuItem(NuvioGraphics &g, float x, float y, float w, const char *title,
-                         const char *subtitle, bool focused) {
-    if (focused) g.RoundedRect(x - 3, y - 3, w + 6, 78, 15, FOCUS_BLUE);
-    g.RoundedRect(x, y, w, 72, 12, focused ? BG_HOVER : BG_CARD);
-    g.Text(x + 24, y + 10, 24, title, TEXT_WHITE);
-    g.Text(x + 24, y + 42, 16, subtitle, TEXT_MUTED, w - 80);
-    g.Text(x + w - 40, y + 16, 32, ">", focused ? TEXT_WHITE : TEXT_DIM);
+static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool online) {
+    (void)online;
+    g.Rect(0,0,SCREEN_WIDTH,SCREEN_HEIGHT,BG_DARK);
+    // The 80px global navigation rail is drawn above this view.
+    g.Rect(80,0,218,720,Color(27,27,27));
+    g.Text(96,127,23,"Configuracoes",TEXT_WHITE,198);
+    g.Rect(80,199,218,1,Color(61,61,61));
+
+    const char *categories[]={"Voce","Visual","Midia","Servicos","Sistema"};
+    const int categoryIcons[]={3,4,1,2,4};
+    for(int c=0;c<5;++c) {
+        const float y=221+c*56.0f;
+        const bool selected=state.settingsCategory==c;
+        const bool focused=selected&&state.settingsCategoriesFocused&&!state.sidebarFocused;
+        if(selected)g.RoundedRect(94,y,192,43,8,focused?TEXT_WHITE:Color(44,44,44));
+        g.RoundedRect(102,y+4,35,35,8,selected?Color(70,70,70):Color(34,34,34));
+        g.Icon(categoryIcons[c],110,y+12,19,selected?TEXT_WHITE:TEXT_DIM);
+        g.Text(149,y+10,20,categories[c],focused?BG_DARK:selected?TEXT_WHITE:Color(154,158,163),138);
+    }
+    const int cat=state.settingsCategory>=0&&state.settingsCategory<5?state.settingsCategory:0;
+    const char *titles[5][3]={
+        {"Conta","Alternar perfil","Sessao em grupo"},
+        {"Aparencia","Layout",NULL},
+        {"Addons","Streaming P2P",NULL},
+        {"Integracoes","Rastreamento",NULL},
+        {"Avancadas","Sobre",NULL}
+    };
+    const char *subtitles[5][3]={
+        {"Conta e status de sincronizacao","Mude para um perfil diferente","Junte-se a amigos com um codigo de sessao"},
+        {"Temas, icone do app e idioma","Inicio, cartoes, detalhes, streams e navegacao",NULL},
+        {"Gerenciar addons e fontes de descoberta","Ativar P2P, ocultar estatisticas e limpar cache",NULL},
+        {"Gerenciar integracoes disponiveis","Provedores para biblioteca e continuar assistindo",NULL},
+        {"Inicializacao e comportamento dos perfis","Informacoes do app, atualizacoes e creditos",NULL}
+    };
+    const int rowIcons[5][3]={{3,3,3},{4,3,0},{2,1,0},{2,3,0},{4,3,0}};
+    g.Text(328,112,31,categories[cat],TEXT_WHITE);
+    const int count=NuvioSettingsItemCount(cat);
+    const float panelX=327,panelY=157,panelW=925,rowH=61;
+    g.RoundedRect(panelX,panelY,panelW,count*rowH+16,18,Color(27,27,27));
+    for(int r=0;r<count;++r) {
+        const float y=panelY+8+r*rowH;
+        const bool enabled=NuvioSettingsItemEnabled(cat,r);
+        const bool focused=!state.sidebarFocused&&!state.settingsCategoriesFocused&&state.selectedRow==r;
+        if(focused)g.RoundedRect(panelX+8,y,panelW-16,rowH-1,10,Color(52,52,52));
+        if(focused&&enabled) {
+            g.RoundedRect(panelX+8,y,panelW-16,2,1,TEXT_WHITE);
+            g.RoundedRect(panelX+8,y+rowH-3,panelW-16,2,1,TEXT_WHITE);
+        }
+        g.RoundedRect(panelX+17,y+9,37,37,9,Color(51,51,51));
+        g.Icon(rowIcons[cat][r],panelX+26,y+18,19,enabled?TEXT_WHITE:Color(109,109,109));
+        g.Text(panelX+68,y+8,20,titles[cat][r],enabled?TEXT_WHITE:Color(112,112,112),panelW-105);
+        g.Text(panelX+68,y+34,16,subtitles[cat][r],enabled?TEXT_MUTED:Color(99,99,99),panelW-105);
+        if(!enabled)g.Text(panelX+panelW-124,y+14,14,"Em breve",Color(105,105,105));
+        if(r<count-1)g.Rect(panelX+67,y+rowH-1,panelW-84,1,Color(37,37,37));
+    }
+    g.Logo(740,435,26);
+    g.Text(772,436,23,"NUVIO",TEXT_WHITE);
+    g.Text(665,481,15,"Nuvio para Xbox 360",TEXT_DIM);
+    g.Text(655,506,14,"Xbox UI6 - 23.11.2026 | 4 itens no menu",TEXT_DIM);
+    DrawStatusLine(g,645);
+    DrawControllerFooter(g,328,685,"A: Abrir    B: Voltar    Y: Sair da conta");
 }
 
-static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool online) {
+// ============ STREAMING P2P SETTINGS ============
+static void DrawP2PSettingsScreen(NuvioGraphics &g,const NuvioState &state,bool online) {
     DrawGradientBackground(g);
-    DrawUserBadge(g, state, online);
-
-    g.Text(110, 40, 36, "Settings", TEXT_WHITE);
-
-    // Profile card
-    g.RoundedRect(110, 110, 520, 140, 12, BG_CARD);
-    const NuvioProfile &p = state.profiles[state.profileIndex];
-    DrawProfileAvatar(g, 180, 180, 40, ProfileColor(p.color), state.profileName, state.profileIndex == 0);
-    g.Text(250, 150, 26, state.profileName, TEXT_WHITE);
-    g.Text(250, 188, 16, state.profileIndex == 0 ? "Primary profile" : "Profile", TEXT_MUTED);
-    if (online) g.Text(250, 214, 16, "Nuvio cloud: connected", ACCENT_GREEN);
-    else g.Text(250, 214, 16, "Nuvio cloud: awaiting catalog", Color(200, 180, 0));
-
-    // Menu
-    char sub[96];
-    std::sprintf(sub, "%d installed, %d enabled%s", g_addons.count,
-                 NuvioAddonsEnabledCount(&g_addons),
-                 g_addons.fromCloud ? "" : "  (not synchronized)");
-    const bool menuActive = !state.sidebarFocused;
-    DrawMenuItem(g, 110, 280, 520, "Addons", sub, menuActive && state.selectedRow == 0);
-    DrawMenuItem(g, 110, 370, 520, "Switch profile", state.profileName,
-                 menuActive && state.selectedRow == 1);
-
-    DrawMenuItem(g, 110, 460, 520, "Sync account", "Reload cloud addons and catalog", menuActive && state.selectedRow == 2);
-    DrawMenuItem(g, 110, 550, 520, "Sign out", "Disconnect this device and erase saved session", menuActive && state.selectedRow == 3);
-
-    // Application card
-    g.RoundedRect(680, 110, 490, 240, 12, BG_CARD);
-    g.Text(704, 126, 22, "Application", TEXT_WHITE);
-    g.Text(704, 164, 16, "NUVIO 0.1.0-alpha.2", TEXT_WHITE);
-    g.Text(704, 192, 16, "Xbox 360 native streaming interface", TEXT_MUTED);
-    g.Text(704, 220, 16, "Catalog: Nuvio and enabled cloud addons", TEXT_MUTED);
-    g.Text(704, 248, 16, "Artwork: original addon metadata", TEXT_MUTED);
-    g.Text(704, 276, 16, "Network: Xbox-native TLS / direct internet", TEXT_MUTED);
-    g.Text(704, 316, 14, "Player nativo FFmpeg / XAudio2 (ate 720p)", TEXT_DIM);
-
-    DrawStatusLine(g, 646);
-    g.Text(110, SCREEN_HEIGHT - 36, 16, "Up/Down: Choose    A: Open    B: Back to profiles    Y: Sign out", TEXT_DIM);
+    DrawUserBadge(g,state,online);
+    g.Text(110,42,38,"Streaming P2P",TEXT_WHITE);
+    g.Text(110,98,18,"Configuracoes de torrent salvas no proprio Xbox 360",TEXT_MUTED);
+    const float x=110,w=1060;
+    const char *titles[]={"Streaming P2P","Ocultar estatisticas de torrent","Limpar cache de torrent"};
+    const char *subtitles[]={
+        "Permitir streams ponto a ponto (torrent), sem PC",
+        "Esconder detalhes tecnicos durante o carregamento",
+        "Apagar metadados salvos (max. 1 MiB); buffer de video temporario"
+    };
+    for(int i=0;i<3;++i) {
+        float y=168+i*136;
+        bool active=state.selectedRow==i;
+        if(active)g.RoundedRect(x-3,y-3,w+6,119,16,FOCUS_BLUE);
+        g.RoundedRect(x,y,w,113,13,active?BG_HOVER:BG_CARD);
+        g.Text(x+28,y+22,26,titles[i],TEXT_WHITE);
+        g.Text(x+28,y+64,17,subtitles[i],TEXT_MUTED,w-220);
+        if(i<2) {
+            bool enabled=i==0?g_p2pEnabled:g_hideTorrentStats;
+            g.RoundedRect(x+w-132,y+35,92,48,24,enabled?ACCENT_GREEN:BG_SIDEBAR);
+            g.RoundedRect(x+w-127+(enabled?44:0),y+41,36,36,18,TEXT_WHITE);
+        } else g.Text(x+w-88,y+37,26,"A",TEXT_WHITE);
+    }
+    DrawStatusLine(g,638);
+    DrawControllerFooter(g,110,681,"Up/Down: escolher    A: alternar/limpar    B: voltar");
 }
 
 // ============ PLUGINS SCREEN ============
@@ -911,7 +1059,7 @@ static void DrawAddonsScreen(NuvioGraphics &g, const NuvioState &state, bool onl
     if (!g_addons.fromCloud)
         g.Text(110, 612, 18, "Not synchronized. Y: retry cloud sync.", Color(200, 180, 0));
     DrawStatusLine(g, 640);
-    g.Text(110, SCREEN_HEIGHT - 36, 16, "Up/Down: Choose    A: On/Off or Install    X: Remove    B: Back", TEXT_DIM);
+    DrawControllerFooter(g,110,SCREEN_HEIGHT-36,"Up/Down: Choose    A: On/Off or Install    X: Remove    B: Back");
 }
 
 // ============ INSTALL PLUGIN (URL) ============
@@ -923,8 +1071,7 @@ static void DrawAddAddonScreen(NuvioGraphics &g, const NuvioState &state) {
     DrawTextBox(g, 110, 108, SCREEN_WIDTH - 220, 56, state.textBuffer, "https://...");
     DrawKeyboard(g, state, 200);
     DrawStatusLine(g, 612);
-    g.Text(110, SCREEN_HEIGHT - 36, 16,
-           "A: Type    X: Delete    Y: Space    LB/RB: Shift    Start: Install    B: Cancel", TEXT_DIM);
+    DrawControllerFooter(g,110,SCREEN_HEIGHT-36,"A: Type    X: Delete    Y: Space    LB/RB: Shift    Start: Install    B: Cancel");
 }
 
 // ============ DETAILS SCREEN ============
@@ -935,7 +1082,7 @@ static void DrawDetailsScreen(NuvioGraphics &g,const NuvioCatalog &catalog,int i
     if(g.HasBackdrop()&&g_previewIndex==index)g.Backdrop(0,0,1280,720);
     for(int i=0;i<16;++i)g.Rect(i*80.0f,0,80,720,Color(13,13,13,225-i*9));
     g.Rect(0,590,1280,130,Color(13,13,13,190));
-    g.Text(30,24,17,"B  Voltar",TEXT_WHITE);
+    DrawPadHint(g,30,24,'B'," Voltar");
     g.Text(30,180,42,item.title,TEXT_WHITE,1100);
     char meta[130];std::sprintf(meta,"%d  %s  IMDb %s",item.year,g_previewIndex==index?g_preview.runtime:"",
         g_previewIndex==index&&g_preview.rating[0]?g_preview.rating:"--");
@@ -943,19 +1090,25 @@ static void DrawDetailsScreen(NuvioGraphics &g,const NuvioCatalog &catalog,int i
     g.Text(30,286,17,g_previewIndex==index?g_preview.genres:"",TEXT_MUTED,950);
     if(g_previewIndex==index)DrawWrapped(g,30,326,19,g_preview.description,84,4);
     else g.Text(30,326,18,"Carregando informacoes...",TEXT_DIM);
-    g.RoundedRect(30,455,380,44,22,TEXT_WHITE);
-    g.Text(65,465,21,item.type=='S'?"A  Escolher episodio":"A  Reproduzir",BG_DARK);
-    g.RoundedRect(425,455,300,44,22,Color(38,38,38));
-    g.Text(447,467,17,"X  Salvar na biblioteca",TEXT_WHITE);
+    g.RoundedRect(30,530,405,58,18,TEXT_WHITE);
+    g.Circle(62,559,15,PadColor('A'));
+    g.CenteredGlyph(62,559,19,'A',TEXT_WHITE);
+    g.Text(90,546,21,item.type=='S'?"Escolher episodio":"Ver links para assistir",BG_DARK,332);
+    g.RoundedRect(453,530,335,58,18,Color(38,38,38));
+    g.Circle(485,559,15,PadColor('X'));
+    g.CenteredGlyph(485,559,19,'X',TEXT_WHITE);
+    g.Text(511,549,17,"Salvar na biblioteca",TEXT_WHITE,266);
     DrawStatusLine(g,680);
 }
 
 // Addon stream discovery and series episode selection.
 static char g_sourceRows[240][160];
+static char g_sourceError[256]="";
 static int g_sourceCount = 0, g_sourceCursor = 0, g_sourceEpisode = -1;
 static bool g_episodePicker = false;
 static char g_sourceId[128];
 static bool ReadSourceRows(const char *path,bool episodes) {
+    g_sourceError[0]=0;
     g_sourceCount=g_sourceCursor=0;g_episodePicker=episodes;
     return BeginRenderRequest(episodes?6:5,0,path,60000);
 }
@@ -966,21 +1119,95 @@ static bool LoadSourceRows(bool episodes) {
     else std::sprintf(path,"/sources?id=%s&episode=%d",encoded,g_sourceEpisode);
     return ReadSourceRows(path,episodes);
 }
+// Source rows come from the native addon backend: "[BR] ! title | ...".
+static StreamCompat SourceCompatibility(const char *row) {
+    if(!row)return ClassifyStream("");
+    const char *label=row;
+    if(label[0]=='['&&label[3]==']'&&label[4]==' ')label+=5;
+    const bool flagged=label[0]=='!'&&label[1]==' ';
+    if(flagged)label+=2;
+    StreamCompat result=ClassifyStream(label);
+    if(flagged&&result.support!=STREAM_UNSUPPORTED) {
+        result.support=STREAM_UNSUPPORTED;
+        result.reason="Formato requer conversao";
+    }
+    return result;
+}
+static bool PlaybackFormatError(const std::string &reason) {
+    return reason.find("Codec")!=std::string::npos||reason.find("codec")!=std::string::npos||
+        reason.find("Container")!=std::string::npos||reason.find("container")!=std::string::npos||
+        reason.find("Resolucao")!=std::string::npos;
+}
+static void MarkSourceUnsupported() {
+    if(g_sourceCursor<0||g_sourceCursor>=g_sourceCount)return;
+    char *row=g_sourceRows[g_sourceCursor];
+    const bool country=row[0]=='['&&row[3]==']'&&row[4]==' ';
+    const char *title=row+(country?5:0);
+    if(title[0]=='!'&&title[1]==' ')return;
+    char marked[160];
+    // Preserve the language prefix and terminate even when the display title is full.
+    if(country)std::sprintf(marked,"%.5s! %.152s",row,title);
+    else std::sprintf(marked,"! %.157s",title);
+    CopyField(row,sizeof(g_sourceRows[0]),marked);
+}
+static void DrawPlaybackError(NuvioGraphics &g,const char *reason,bool format) {
+    g.Rect(0,0,SCREEN_WIDTH,SCREEN_HEIGHT,BG_DARK);
+    g.RoundedRect(186,146,908,424,22,Color(27,27,27));
+    g.Circle(263,223,30,Color(157,57,61));
+    g.Text(254,202,36,"!",TEXT_WHITE);
+    g.Text(313,190,30,format?"Formato nao suportado no Xbox 360":
+        "Nao foi possivel reproduzir",TEXT_WHITE,742);
+    g.Text(240,276,21,format?
+        "Escolha outro link em 720p com codec compativel.":
+        "A fonte nao abriu. Tente outro link ou atualize os addons.",TEXT_MUTED,795);
+    DrawWrapped(g,240,335,18,reason,74,3);
+    g.RoundedRect(238,476,254,50,25,TEXT_WHITE);
+    g.Text(266,488,19,"Voltar aos links",BG_DARK);
+    DrawControllerFooter(g,238,538,"A: Voltar    B: Voltar");
+}
 static void DrawSourcesScreen(NuvioGraphics &g) {
+    if(g_sourceError[0]) {DrawPlaybackError(g,g_sourceError,true);return;}
     DrawGradientBackground(g);
-    g.Text(110,40,36,g_episodePicker ? "Choose an episode" : "Addon sources",TEXT_WHITE);
+    g.Text(110,40,36,g_episodePicker ? "Escolha um episodio" : "Links para assistir",TEXT_WHITE);
     if (!g_sourceCount) g.Text(110,140,23,g_artThread?"Carregando episodios/fontes...":g_episodePicker?"Nenhum episodio disponivel.":"Nenhuma fonte retornada.",TEXT_MUTED);
     const int top = g_sourceCursor >= 6 ? g_sourceCursor-5 : 0;
     for (int n=0;n<6 && top+n<g_sourceCount;++n) {
-        int i=top+n;
-        g.RoundedRect(110,120+n*72,1050,62,10,i==g_sourceCursor ? BG_HOVER : BG_CARD);
-        if (i==g_sourceCursor) g.Rect(110,120+n*72,4,62,TEXT_WHITE);
-        g.Text(130,136+n*72,18,g_sourceRows[i],TEXT_WHITE,1000);
+        const int i=top+n;
+        const StreamCompat compat=g_episodePicker?ClassifyStream(""):SourceCompatibility(g_sourceRows[i]);
+        const bool unsupported=compat.support==STREAM_UNSUPPORTED;
+        g.RoundedRect(110,120+n*72,1050,62,10,
+            unsupported?Color(25,25,25):i==g_sourceCursor?BG_HOVER:BG_CARD);
+        if(i==g_sourceCursor)g.Rect(110,120+n*72,4,62,
+            unsupported?Color(143,143,143):TEXT_WHITE);
+        const char *label=g_sourceRows[i];
+        char country[3]="--";
+        if(label[0]=='['&&label[3]==']'&&label[4]==' ') {
+            country[0]=label[1];country[1]=label[2];label+=5;
+        }
+        if(label[0]=='!'&&label[1]==' ')label+=2;
+        char clean[160];
+        CopyField(clean,sizeof(clean),label);
+        char *annotation=std::strstr(clean," [Conversao:");
+        if(annotation)*annotation=0;
+        if(!g_episodePicker) {
+            DrawLanguageFlag(g,130,136+n*72,country);
+
+        }
+        g.Text(g_episodePicker?130:200,unsupported?130+n*72:136+n*72,18,clean,
+            unsupported?Color(122,122,122):TEXT_WHITE,g_episodePicker?1000:920);
+        if(unsupported) {
+            // Fade all visuals, including country flag and source title.
+            g.RoundedRect(110,120+n*72,1050,62,10,Color(13,13,13,94));
+            char warning[110];
+            std::sprintf(warning,"Nao suportado no Xbox 360: %s",compat.reason);
+            g.Text(200,158+n*72,14,warning,Color(175,130,97),850);
+        }
     }
-    g.Text(110,590,17,"Sources are queried directly from your enabled Nuvio cloud addons.",TEXT_MUTED);
-    if (!g_episodePicker) g.Text(110,620,17,"Escolha uma fonte H.264/AVC de ate 720p. A: reproduzir.",TEXT_MUTED);
+    g.Text(110,590,17,"Idioma informado pelo addon; -- = idioma nao identificado.",TEXT_MUTED);
+    if (!g_episodePicker) g.Text(110,620,17,
+        "Links apagados: formato incompativel. Prefira H.264/AVC ate 720p.",TEXT_MUTED);
     DrawStatusLine(g,650);
-    g.Text(110,685,16,"Up/Down: Choose   A: Open   X: Refresh   B: Back",TEXT_DIM);
+    DrawControllerFooter(g,110,681,"Up/Down: Escolher   A: Abrir   X: Atualizar   B: Voltar");
 }
 
 // ============ MAIN DRAW FUNCTION ============
@@ -991,19 +1218,41 @@ static void DrawScreen(NuvioGraphics &g, const NuvioState &state,
 
     if(state.screen==NUVIO_SCREEN_PLAYER&&g_player) {
         g_player->Update();
+        // A decoder/demuxer failure gets a visible error view, not a black frame.
+        if(g_player->Failed()) {
+            const std::string &reason=g_player->Error();
+            DrawPlaybackError(g,reason.c_str(),PlaybackFormatError(reason));
+            g.End();
+            return;
+        }
         g_videoDevice->SetRenderState(D3DRS_VIEWPORTENABLE,TRUE);
         D3DRECT screen={0,0,1280,720};g_player->RenderFrame(screen);
         g.ResumeUI();
-        if(g_player->IsBuffering()) {
+        const bool loading=g_player->IsBuffering();
+        if(loading)g_playerReadyAt=0;
+        else if(!g_player->Failed()&&!g_playerReadyAt)g_playerReadyAt=GetTickCount();
+        // Keep the completed 100% briefly visible after the first frame.
+        if((loading||(g_playerReadyAt&&GetTickCount()-g_playerReadyAt<700))&&!g_player->Failed()) {
             std::wstring wide=g_player->StatusText();std::string status(wide.begin(),wide.end());
-            g.Text(40,32,24,status.c_str(),TEXT_WHITE,1180);
+            if(g_playingTorrent&&g_hideTorrentStats)status="Carregando video P2P...";
+            const int percent=g_player->StartupPercent();
+            g.RoundedRect(242,258,796,168,19,Color(12,12,12,230));
+            g.Text(282,284,28,"Preparando video",TEXT_WHITE);
+            char amount[24];std::sprintf(amount,"%d%%",percent);
+            g.Text(940,286,24,amount,ACCENT_GREEN);
+            g.RoundedRect(282,344,718,14,7,Color(65,65,65));
+            if(percent>0)g.RoundedRect(282,344,718.0f*percent/100.0f,14,7,ACCENT_GREEN);
+            g.Text(282,374,18,status.c_str(),TEXT_MUTED,716);
+            g.Text(282,402,14,"Buffer inicial; o torrent continua em streaming.",TEXT_DIM);
         }
         if(g_player->Failed())g.Text(40,90,18,g_player->Error().c_str(),TEXT_WHITE,1140);
         if(GetTickCount()-g_playerInputAt<4000||g_player->IsPaused()||g_player->Failed()) {
             g.Rect(0,655,1280,65,Color(0,0,0,210));
-            char status[140];std::sprintf(status,"%d:%02d / %d:%02d    A: %s    Left/Right: 10s    B: voltar",
-                (int)g_player->Position()/60,(int)g_player->Position()%60,(int)g_player->Duration()/60,(int)g_player->Duration()%60,
-                g_player->IsPaused()?"Continuar":"Pausar");g.Text(40,677,22,status,TEXT_WHITE,1200);
+            char time[64];std::sprintf(time,"%d:%02d / %d:%02d",
+                (int)g_player->Position()/60,(int)g_player->Position()%60,(int)g_player->Duration()/60,(int)g_player->Duration()%60);
+            g.Text(40,678,21,time,TEXT_WHITE,280);
+            DrawControllerFooter(g,365,675,g_player->IsPaused()?"A: Continuar    B: Voltar":"A: Pausar    B: Voltar");
+            g.Text(755,679,16,"Left/Right: 10s",TEXT_DIM);
         }
         g.End();return;
     }
@@ -1018,6 +1267,7 @@ static void DrawScreen(NuvioGraphics &g, const NuvioState &state,
         case NUVIO_SCREEN_SEARCH_RESULTS: DrawSearchScreen(g, state, online); break;
         case NUVIO_SCREEN_LIBRARY:        DrawLibraryScreen(g, state, online); break;
         case NUVIO_SCREEN_SETTINGS:       DrawSettingsScreen(g, state, online); break;
+        case NUVIO_SCREEN_P2P_SETTINGS:   DrawP2PSettingsScreen(g, state, online); break;
         case NUVIO_SCREEN_SOURCES:        DrawSourcesScreen(g); break;
         case NUVIO_SCREEN_ADDONS:         DrawAddonsScreen(g, state, online); break;
         case NUVIO_SCREEN_ADD_ADDON:      DrawAddAddonScreen(g, state); break;
@@ -1133,10 +1383,10 @@ static void ScheduleArtwork(NuvioGraphics &gui,const NuvioState &app,const Nuvio
     }
     for(int i=0;i<n;++i)if(!gui.HasPoster(visible[i])&&ArtworkRetry(1,visible[i])) {
         int ix=visible[i];std::sprintf(path,"/poster/%s.rgba",catalog.items[ix].imdbId);
-        BeginRenderRequest(1,ix,path,180000);return;
+        BeginRenderRequest(1,ix,path,300000);return;
     }
     if(focused>=0&&focused==g_previewIndex&&!gui.HasBackdrop()&&ArtworkRetry(3,focused)) {
-        std::sprintf(path,"/preview/%s.rgba",catalog.items[focused].imdbId);BeginRenderRequest(3,focused,path,1000000);
+        std::sprintf(path,"/preview/%s.rgba",catalog.items[focused].imdbId);BeginRenderRequest(3,focused,path,2200000);
     }
 }
 
@@ -1149,6 +1399,9 @@ static bool g_catalogOk = false;
 static int g_requestPage = 0, g_requestMode = 0;
 static char g_requestQuery[512];
 static bool g_refreshCloud = false;
+static bool g_catalogPending=false,g_pendingRefresh=false;
+static int g_pendingPage=0,g_pendingMode=0;
+static char g_pendingQuery[512]="";
 static DWORD WINAPI CatalogWorker(void *) {
     if (g_refreshCloud) NuvioHttpGet("native", 0, "/addons", 180000, &g_addonReply);
     char path[600];
@@ -1158,23 +1411,36 @@ static DWORD WINAPI CatalogWorker(void *) {
     g_catalogOk = NuvioHttpGet("native", 0, path, 250000, &g_catalogReply);
     return 0;
 }
-static bool ReloadCatalog(NuvioGraphics &, const char *, int page,
-                          int mode = 0, const char *query = "", bool refreshCloud = false) {
-    if (g_catalogThread) return false;
-    g_requestPage = page; g_requestMode = mode; g_refreshCloud = refreshCloud;
-    NuvioUrlEncode(g_requestQuery, sizeof(g_requestQuery), query);
+static void StartPendingCatalog() {
+    if(!g_catalogPending||g_catalogThread||g_artThread)return;
+    g_requestPage=g_pendingPage;g_requestMode=g_pendingMode;g_refreshCloud=g_pendingRefresh;
+    CopyField(g_requestQuery,sizeof(g_requestQuery),g_pendingQuery);
+    g_catalogPending=false;
     g_catalogOk = false;
     g_catalogThread = CreateThread(NULL, 128 * 1024, CatalogWorker, NULL, 0, NULL);
     g_catalogLoading = g_catalogThread != NULL;
-    return g_catalogLoading;
+    if(!g_catalogLoading)SetStatus("Nao foi possivel iniciar o carregamento. Tente novamente com X.");
+}
+static bool ReloadCatalog(NuvioGraphics &, const char *, int page,
+                          int mode = 0, const char *query = "", bool refreshCloud = false) {
+    // Latest navigation wins. Never run the backend concurrently with artwork or another catalog.
+    g_pendingPage=page;g_pendingMode=mode;g_pendingRefresh=refreshCloud;
+    NuvioUrlEncode(g_pendingQuery,sizeof(g_pendingQuery),query);
+    g_catalogPending=true;g_catalogLoading=true;
+    StartPendingCatalog();
+    return g_catalogPending||g_catalogThread!=NULL;
 }
 static bool FinishCatalog(NuvioGraphics &gui, NuvioState &app, bool &online) {
     if (!g_catalogThread || WaitForSingleObject(g_catalogThread, 0) != WAIT_OBJECT_0) return false;
-    CloseHandle(g_catalogThread); g_catalogThread = NULL; g_catalogLoading = false;
+    CloseHandle(g_catalogThread); g_catalogThread = NULL; g_catalogLoading = g_catalogPending;
     if (g_addonReply.bytes) {
         NuvioAddonsParse(&g_addons, (const char*)g_addonReply.bytes, g_addonReply.length);
         NuvioHttpFree(&g_addonReply);
     }
+    const bool target=(g_requestMode==1&&app.screen==NUVIO_SCREEN_SEARCH_RESULTS)||
+        (g_requestMode==2&&app.screen==NUVIO_SCREEN_LIBRARY)||
+        (g_requestMode==0&&(app.screen==NUVIO_SCREEN_HOME||app.screen==NUVIO_SCREEN_DISCOVER));
+    if(g_catalogPending||!target) {NuvioHttpFree(&g_catalogReply);return true;}
     bool ok = g_catalogOk && NuvioCatalogLoadText(&g_catalog,
         (const char*)g_catalogReply.bytes, g_catalogReply.length);
     NuvioHttpFree(&g_catalogReply);
@@ -1217,6 +1483,7 @@ int main() {
     NuvioState app;
     NuvioInitialize(&app);
     NuvioProfilesLoad(&app, kProfilesFile);
+    LoadP2PSettings();
     NuvioAddonsLoadDefaults(&g_addons);
     g_catalog.count = 0;
     g_catalog.isDemo = false;
@@ -1297,6 +1564,7 @@ int main() {
 
         FinishArtwork(gui,app);
         if(FinishCatalog(gui,app,online))posterPasses=0;
+        StartPendingCatalog();
         if(g_artThread||g_catalogLoading) {
             WORD localMask=0xF|XINPUT_GAMEPAD_BACK;
             const bool browse=app.screen==NUVIO_SCREEN_HOME||app.screen==NUVIO_SCREEN_DISCOVER||
@@ -1350,10 +1618,35 @@ int main() {
         switch (app.screen) {
         case NUVIO_SCREEN_PLAYER:
             if(pressed)g_playerInputAt=GetTickCount();
+
+            if(g_player->Failed()) {
+                if(bA||bB||bStart) {
+                    if(PlaybackFormatError(g_player->Error()))MarkSourceUnsupported();
+                    SetStatus(g_player->Error().c_str());
+                    delete g_player;g_player=NULL;g_playingTorrent=false;
+                    g_playerReadyAt=0;app.screen=NUVIO_SCREEN_SOURCES;
+                }
+                break;
+            }
             if(bA||bStart)g_player->TogglePause();
             if(bLeft)g_player->SeekRelative(-10);
             if(bRight)g_player->SeekRelative(10);
-            if(bB) {delete g_player;g_player=NULL;app.screen=NUVIO_SCREEN_SOURCES;}
+            if(bB) {delete g_player;g_player=NULL;g_playingTorrent=false;g_playerReadyAt=0;app.screen=NUVIO_SCREEN_SOURCES;}
+            break;
+
+        case NUVIO_SCREEN_P2P_SETTINGS:
+            if(bUp&&app.selectedRow>0)--app.selectedRow;
+            if(bDown&&app.selectedRow<2)++app.selectedRow;
+            if(bB)NuvioBack(&app);
+            else if(bA) {
+                if(app.selectedRow==0)g_p2pEnabled=!g_p2pEnabled;
+                else if(app.selectedRow==1)g_hideTorrentStats=!g_hideTorrentStats;
+                else {
+                    SetStatus(NuvioTorrentClearCache()?"Cache de torrent limpo.":"Falha ao limpar cache de torrent.");
+                    break;
+                }
+                if(!SaveP2PSettings())SetStatus("Falha ao salvar configuracoes P2P.");
+            }
             break;
 
         case NUVIO_SCREEN_LOGIN:
@@ -1499,6 +1792,10 @@ int main() {
         }
 
         case NUVIO_SCREEN_SOURCES: {
+            if(g_sourceError[0]) {
+                if(bA||bB)g_sourceError[0]=0;
+                break; // Dismiss the warning without starting playback or leaving the list.
+            }
             if (bUp && g_sourceCursor > 0) --g_sourceCursor;
             if (bDown && g_sourceCursor+1 < g_sourceCount) ++g_sourceCursor;
             if (bB) {
@@ -1515,7 +1812,17 @@ int main() {
                     if (!LoadSourceRows(false)) SetStatus(NuvioNativeLastError());
                 } else {
                     NuvioPlaybackSource source;
-                    if(!NuvioNativePlaybackSource(g_sourceCursor,&source))SetStatus(NuvioNativeLastError());
+                    const StreamCompat compat=SourceCompatibility(g_sourceRows[g_sourceCursor]);
+                    if(!NuvioNativePlaybackSource(g_sourceCursor,&source)) {
+                        SetStatus(NuvioNativeLastError());
+                        if(compat.support==STREAM_UNSUPPORTED)
+                            CopyField(g_sourceError,sizeof(g_sourceError),NuvioNativeLastError());
+                    }
+                    else if(compat.support==STREAM_UNSUPPORTED&&source.prepareBody.empty()) {
+                        std::sprintf(g_sourceError,"%s (%s)",UnsupportedMessage(),compat.reason);
+                    }
+                    else if(source.url.find("magnet:?")==0&&!g_p2pEnabled)
+                        SetStatus("Ative Streaming P2P em Configuracoes para abrir torrents.");
                     else {
                         if(!g_player) {g_player=new FFPlayer;if(!g_player->Startup(device)){delete g_player;g_player=NULL;}}
                         if(!g_player)SetStatus("Falha ao iniciar decoder ou audio.");
@@ -1523,8 +1830,9 @@ int main() {
                             gui.ClearPosters();gui.ClearBackdrop();gui.ClearAvatars();
                             std::vector<std::string> urls;urls.push_back(source.url);
                             std::vector<std::wstring> labels;labels.push_back(L"Nuvio");
+                            g_playingTorrent=source.url.find("magnet:?")==0;
                             g_player->Open(urls,labels,source.headers,0,0,0,source.prepareBody);
-                            app.screen=NUVIO_SCREEN_PLAYER;g_playerInputAt=GetTickCount();
+                            app.screen=NUVIO_SCREEN_PLAYER;g_playerInputAt=GetTickCount();g_playerReadyAt=0;
                         }
                     }
                 }
@@ -1555,7 +1863,7 @@ int main() {
         }
 
         default: {
-            if (app.screen == NUVIO_SCREEN_SETTINGS && (bY || (bA && !app.sidebarFocused && app.selectedRow == 3))) {
+            if (app.screen == NUVIO_SCREEN_SETTINGS && bY) {
                 if (AccountRequest(bridgeIp, "/account/logout")) {
                     NuvioInitialize(&app);
                     NuvioCatalogClear(&g_catalog);
@@ -1568,7 +1876,7 @@ int main() {
                 }
                 break;
             }
-            const int rowCount = app.screen == NUVIO_SCREEN_SETTINGS ? 4 :
+            const int rowCount = app.screen == NUVIO_SCREEN_SETTINGS ? NuvioSettingsItemCount(app.settingsCategory) :
                 app.screen==NUVIO_SCREEN_DISCOVER?(DiscoverCount(app,g_catalog)+4)/5:NuvioCatalogRowCount(&g_catalog);
             if (bLeft) NuvioMoveHorizontal(&app, -1);
             if (bRight) NuvioMoveHorizontal(&app, 1);
@@ -1584,10 +1892,7 @@ int main() {
                 while(app.selectedColumn>0&&DiscoverItem(app,g_catalog,app.selectedRow*5+app.selectedColumn)<0)--app.selectedColumn;
             }
             if (bB) NuvioBack(&app);
-            if (bA && app.screen == NUVIO_SCREEN_SETTINGS && !app.sidebarFocused && app.selectedRow == 2) {
-                ReloadCatalog(gui, bridgeIp, 0, 0, "", true);
-                currentCatalogPage = 0;
-            } else if (bA) NuvioSelect(&app,
+            if (bA) NuvioSelect(&app,
                 (app.screen == NUVIO_SCREEN_HOME || app.screen == NUVIO_SCREEN_DISCOVER)
                 ? FocusedMovieIndex(app, g_catalog)
                 : NuvioCatalogIndexForRow(&g_catalog, app.selectedRow, app.selectedColumn));
@@ -1658,7 +1963,7 @@ int main() {
             }
             if ((app.screen == NUVIO_SCREEN_HOME || app.screen == NUVIO_SCREEN_DISCOVER) &&
                 lastScreen != NUVIO_SCREEN_DETAILS && lastScreen != NUVIO_SCREEN_HOME &&
-                lastScreen != NUVIO_SCREEN_DISCOVER && lastScreen != NUVIO_SCREEN_PROFILE && !g_catalogLoading) {
+                lastScreen != NUVIO_SCREEN_DISCOVER && lastScreen != NUVIO_SCREEN_PROFILE) {
                 NuvioCatalogClear(&g_catalog); gui.ClearPosters(); gui.ClearBackdrop();
                 ReloadCatalog(gui, bridgeIp, 0);
             }

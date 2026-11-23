@@ -4,6 +4,7 @@
 #include "stb_image.h"
 
 #include <d3dx9.h>
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -204,27 +205,46 @@ void NuvioGraphics::Rect(float x, float y, float w, float h, D3DCOLOR color)
     Quad(x, y, w, h, 0, 0, 1, 1, m_white, color);
 }
 
+// Draw 1-pixel scan lines with subpixel edge coverage instead of 2-pixel steps.
+// This works with the existing alpha-blended D3D9 quad renderer and saves a shader.
 void NuvioGraphics::RoundedRect(float x, float y, float w, float h, float radius,
                                 D3DCOLOR color)
 {
-    if (radius <= 0) { Rect(x, y, w, h, color); return; }
-    if (radius * 2 > w) radius = w / 2;
-    if (radius * 2 > h) radius = h / 2;
-    Rect(x, y + radius, w, h - 2 * radius, color);
-    for (int row = 0; row < int(radius); row += 2) {
-        const float yDist = radius - float(row) - 1.0f;
-        const float reach = float(std::sqrt(radius * radius - yDist * yDist));
-        const float inset = radius - reach;
-        Rect(x + inset, y + row, w - 2 * inset, 2, color);
-        Rect(x + inset, y + h - row - 2, w - 2 * inset, 2, color);
+    if(radius<=0){Rect(x,y,w,h,color);return;}
+    if(radius*2>w)radius=w/2;
+    if(radius*2>h)radius=h/2;
+    Rect(x,y+radius,w,h-2*radius,color);
+    const int rows=(int)std::ceil(radius),a=(int)(color>>24)&255;
+    for(int row=0;row<rows;++row) {
+        const float yDist=(std::max)(0.0f,radius-row-0.5f);
+        const float inset=radius-(float)std::sqrt((std::max)(0.0f,radius*radius-yDist*yDist));
+        const int solid=(int)std::ceil(inset);
+        Rect(x+solid,y+row,w-2*solid,1,color);
+        Rect(x+solid,y+h-row-1,w-2*solid,1,color);
+        const int edgeAlpha=(int)(a*(solid-inset)+0.5f);
+        if(solid>0&&edgeAlpha>0) {
+            const D3DCOLOR edge=(color&0x00FFFFFF)|((D3DCOLOR)edgeAlpha<<24);
+            Rect(x+solid-1,y+row,1,1,edge);Rect(x+w-solid,y+row,1,1,edge);
+            Rect(x+solid-1,y+h-row-1,1,1,edge);Rect(x+w-solid,y+h-row-1,1,1,edge);
+        }
     }
 }
-
-void NuvioGraphics::Circle(float x, float y, float radius, D3DCOLOR color)
+void NuvioGraphics::Circle(float x,float y,float radius,D3DCOLOR color)
 {
-    for (int row = -int(radius); row < int(radius); row += 2) {
-        const float reach = float(std::sqrt(radius * radius - float(row * row)));
-        Rect(x - reach, y + row, reach * 2, 2, color);
+    if(radius<=0)return;
+    const int rows=(int)std::ceil(radius),a=(int)(color>>24)&255;
+    for(int row=0;row<rows;++row) {
+        const float dist=row+0.5f;
+        const float reach=(float)std::sqrt((std::max)(0.0f,radius*radius-dist*dist));
+        const int solid=(int)std::floor(reach);
+        Rect(x-solid,y+row,solid*2,1,color);
+        Rect(x-solid,y-row-1,solid*2,1,color);
+        const int alpha=(int)(a*(reach-solid)+0.5f);
+        if(alpha>0) {
+            const D3DCOLOR edge=(color&0x00FFFFFF)|((D3DCOLOR)alpha<<24);
+            Rect(x-solid-1,y+row,1,1,edge);Rect(x+solid,y+row,1,1,edge);
+            Rect(x-solid-1,y-row-1,1,1,edge);Rect(x+solid,y-row-1,1,1,edge);
+        }
     }
 }
 
@@ -250,6 +270,16 @@ void NuvioGraphics::Text(float x, float y, float fontSize, const char *text,
              m_font, color);
         x += advance;
     }
+}
+
+void NuvioGraphics::CenteredGlyph(float cx,float cy,float fontSize,char glyph,D3DCOLOR color)
+{
+    const int index=(unsigned char)glyph-32;
+    if(index<0||index>=96)return;
+    const unsigned char *ink=kNuvioGlyphInk[index];
+    const float scale=fontSize/31.0f;
+    char label[2]={glyph,0};
+    Text(cx-(ink[0]+ink[2])*0.5f*scale,cy-(ink[1]+ink[3])*0.5f*scale,fontSize,label,color);
 }
 
 void NuvioGraphics::Icon(int index, float x, float y, float size, D3DCOLOR color)
@@ -300,6 +330,36 @@ void NuvioGraphics::Poster(int index, float x, float y, float w, float h)
         if (m_posterIds[i]!=index || !m_posters[i]) continue;
         m_posterAge[i]=++m_cacheClock;
         Quad(x,y,w,h,0,0,1,1,m_posters[i],0xFFFFFFFF); return;
+    }
+}
+
+void NuvioGraphics::PosterRounded(int index,float x,float y,float w,float h,float radius,D3DCOLOR matte)
+{
+    (void)matte; // Clip the texture itself, preserving the rounded selection underneath.
+    if(radius<=0){Poster(index,x,y,w,h);return;}
+    IDirect3DTexture9 *texture=NULL;
+    for(int i=0;i<POSTER_CACHE_SIZE;++i)if(m_posterIds[i]==index&&m_posters[i]) {
+        texture=m_posters[i];m_posterAge[i]=++m_cacheClock;break;
+    }
+    if(!texture||w<=0||h<=0)return;
+    if(radius*2>w)radius=w/2;
+    if(radius*2>h)radius=h/2;
+    Quad(x,y+radius,w,h-radius*2,0,radius/h,1,(h-radius)/h,texture,0xFFFFFFFF);
+    const int rows=(int)std::ceil(radius);
+    for(int row=0;row<rows;++row) {
+        const float dist=(std::max)(0.0f,radius-row-0.5f);
+        const float inset=radius-(float)std::sqrt((std::max)(0.0f,radius*radius-dist*dist));
+        const float start=(float)std::ceil(inset);
+        const int alpha=(int)(255*(start-inset)+0.5f);
+        for(int side=0;side<2;++side) {
+            const float yy=side?h-row-1.0f:(float)row;
+            Quad(x+start,y+yy,w-start*2,1,start/w,yy/h,1-start/w,(yy+1)/h,texture,0xFFFFFFFF);
+            if(alpha>0) {
+                const D3DCOLOR edge=D3DCOLOR_ARGB(alpha,255,255,255);
+                Quad(x+start-1,y+yy,1,1,(start-1)/w,yy/h,start/w,(yy+1)/h,texture,edge);
+                Quad(x+w-start,y+yy,1,1,(w-start)/w,yy/h,(w-start+1)/w,(yy+1)/h,texture,edge);
+            }
+        }
     }
 }
 

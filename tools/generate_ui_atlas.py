@@ -8,6 +8,8 @@ The drawings are independently authored; no Nuvio code/assets are copied.
 
 from pathlib import Path
 import argparse
+import math
+import re
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -51,14 +53,14 @@ def make_icons(image):
     line(3, [(24, 16), (47, 16), (47, 43)])
     line(3, [(25, 29), (36, 29)])
 
-    # Settings gear and hub.
-    oval(4, 24, 24, 40, 40)
-    for x0, y0, x1, y1 in [
-        (32, 13, 32, 21), (32, 43, 32, 51), (13, 32, 21, 32),
-        (43, 32, 51, 32), (19, 19, 24, 24), (40, 40, 45, 45),
-        (19, 45, 24, 40), (40, 24, 45, 19)
-    ]:
-        line(4, [(x0, y0), (x1, y1)], width=4)
+    # Continuous eight-tooth cog silhouette with a circular hub opening.
+    points = []
+    for tooth in range(8):
+        for offset, radius in [(-.5, 19), (-.3, 19), (-.3, 25), (.3, 25), (.3, 19), (.5, 19)]:
+            angle = (tooth + offset) * math.pi / 4
+            points.append(xy(4, 32 + math.cos(angle) * radius, 32 + math.sin(angle) * radius))
+    draw.polygon(points, fill=255)
+    draw.ellipse((*xy(4, 23, 23), *xy(4, 41, 41)), fill=0)
 
     canvas = canvas.resize((ICON_CELL * 5, ICON_CELL), Image.Resampling.LANCZOS)
     image.paste(canvas, (0, ICON_Y))
@@ -82,18 +84,35 @@ def main():
     parser.add_argument("--font", type=Path, default=Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
     parser.add_argument("--output", type=Path, default=Path("VisualStudio2010/src/NuvioUiAtlas.h"))
     parser.add_argument("--preview", type=Path)
+    parser.add_argument("--source-atlas", type=Path, help="Keep the existing font bitmap and regenerate icons/metrics")
     args = parser.parse_args()
-    font = ImageFont.truetype(str(args.font), 31)
     bitmap = Image.new("L", (W, H))
     draw = ImageDraw.Draw(bitmap)
     advances = []
-    for code in range(32, 128):
-        index = code - 32
-        left = (index % 12) * CELL_W
-        top = (index // 12) * CELL_H
-        char = chr(code)
-        draw.text((left + 2, top + 4), char, font=font, anchor="la", fill=255)
-        advances.append(min(CELL_W, max(9, round(font.getlength(char) + 1))))
+    if args.source_atlas:
+        source = args.source_atlas.read_text(encoding="ascii")
+        advances = list(map(int, re.search(r'kNuvioGlyphAdvance\[96\] = \{(.*?)\};', source, re.S)[1].replace('\n', '').strip(' ,').split(',')))
+        packed = list(map(int, re.search(r'kNuvioUiAtlasRle\[\] = \{(.*?)\};', source, re.S)[1].replace('\n', '').strip(' ,').split(',')))
+        raw = bytearray()
+        for i in range(0, len(packed), 2):
+            raw.extend(bytes([packed[i + 1]]) * packed[i])
+        assert len(raw) == W * H and len(advances) == 96
+        bitmap = Image.frombytes("L", (W, H), bytes(raw))
+        ImageDraw.Draw(bitmap).rectangle((0, ICON_Y, W, ICON_Y + ICON_CELL), fill=0)
+    else:
+        font = ImageFont.truetype(str(args.font), 31)
+        for code in range(32, 128):
+            index = code - 32
+            left = (index % 12) * CELL_W
+            top = (index // 12) * CELL_H
+            char = chr(code)
+            draw.text((left + 2, top + 4), char, font=font, anchor="la", fill=255)
+            advances.append(min(CELL_W, max(9, round(font.getlength(char) + 1))))
+    bounds = []
+    for index in range(96):
+        left, top = (index % 12) * CELL_W, (index // 12) * CELL_H
+        cell = bitmap.crop((left, top, left + CELL_W, top + CELL_H))
+        bounds.append(cell.getbbox() or (0, 0, 0, 0))
     make_icons(bitmap)
     raw = bitmap.tobytes()
     packed = rle_pack(raw)
@@ -110,6 +129,8 @@ def main():
         "NUVIO_FONT_CELL_W = 40, NUVIO_FONT_CELL_H = 48, "
         "NUVIO_ICON_TOP = 388 };\n"
         "static const unsigned char kNuvioGlyphAdvance[96] = {\n" + "\n".join(glyphs) + "\n};\n"
+        "static const unsigned char kNuvioGlyphInk[96][4] = {\n" +
+        "\n".join("    {" + ",".join(map(str, box)) + "}," for box in bounds) + "\n};\n"
         "static const unsigned char kNuvioUiAtlasRle[] = {\n" + "\n".join(rows) + "\n};\n"
         "#endif\n"
     )

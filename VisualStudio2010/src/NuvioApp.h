@@ -19,7 +19,8 @@ enum NuvioScreen {
     NUVIO_SCREEN_ADD_ADDON,
     NUVIO_SCREEN_QR_LOGIN,
     NUVIO_SCREEN_SOURCES,
-    NUVIO_SCREEN_PLAYER
+    NUVIO_SCREEN_PLAYER,
+    NUVIO_SCREEN_P2P_SETTINGS
 };
 
 enum NuvioCatalogMode {
@@ -73,6 +74,8 @@ struct NuvioState {
     int selectedColumn;
     int selectedCatalogIndex;
     bool sidebarFocused;
+    int settingsCategory;        // Voce, Visual, Midia, Servicos, Sistema
+    bool settingsCategoriesFocused; // secondary settings sidebar
 
     // Search state
     char searchQuery[128];
@@ -113,6 +116,8 @@ void NuvioMoveHorizontal(NuvioState *state, int direction);
 void NuvioMoveVertical(NuvioState *state, int direction, int rowCount);
 void NuvioSelect(NuvioState *state, int catalogIndex);
 void NuvioBack(NuvioState *state);
+int NuvioSettingsItemCount(int category);
+bool NuvioSettingsItemEnabled(int category,int row);
 void NuvioOpenScreen(NuvioState *state, NuvioScreen screen);
 const char *NuvioScreenName(NuvioScreen screen);
 

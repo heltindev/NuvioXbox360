@@ -7,6 +7,7 @@ import socket
 import struct
 import sys
 import threading
+import time
 from pathlib import Path
 from urllib.parse import quote
 
@@ -64,10 +65,12 @@ def main():
                           {'length': original_size, 'path': ['sample.mp4']}]
     else:
         entry['length'] = len(data)
+    if '--large-metadata' in sys.argv:
+        entry['comment'] = b'M' * 70000
     info = bencode(entry)
     info_hash = hashlib.sha1(info).digest()
     corrupt = '--corrupt' in sys.argv
-    def peer(sock):
+    def peer(sock, reject=False):
         try:
             sock.settimeout(60)
             hello = receive(sock, 68)
@@ -75,9 +78,16 @@ def main():
             sock.sendall(b'\x13BitTorrent protocol' + b'\0'*5 + b'\x10\0\0' + info_hash + b'-FIX001-123456789012')
             def send(kind, payload=b''):
                 sock.sendall(struct.pack('>I', len(payload)+1) + bytes([kind]) + payload)
-            send(20, b'\0' + bencode({'m': {'ut_metadata': 3}, 'metadata_size': len(info)}))
+            if '--split-handshake' in sys.argv:
+                send(20, b'\0' + bencode({'m': {'ut_metadata': 3}}))
+                time.sleep(.1)
+                send(20, b'\0' + bencode({'metadata_size': len(info)}))
+            else:
+                send(20, b'\0' + bencode({'m': {'ut_metadata': 3}, 'metadata_size': len(info)}))
             send(5, b'\xff' * ((len(data)+piece_length-1)//piece_length//8+1))
             client_extension = 1
+            requests = []
+            parts = (len(info) + 16383) // 16384
             while True:
                 size, = struct.unpack('>I', receive(sock, 4))
                 if not size:
@@ -89,8 +99,22 @@ def main():
                 elif kind == 20 and payload[0] == 3:
                     request = decode(payload[1:])[0]
                     part = request[b'piece']
-                    send(20, bytes([client_extension]) + bencode({'msg_type': 1, 'piece': part,
-                        'total_size': len(info)}) + info[part*16384:(part+1)*16384])
+                    if reject:
+                        send(20, bytes([client_extension]) + bencode({'msg_type': 2, 'piece': part}))
+                        continue
+                    requests.append(part)
+                    if '--pipeline-metadata' in sys.argv and len(requests) < min(4, parts - min(requests)):
+                        continue
+                    # Ignore future extension types and accept requested blocks out of order.
+                    if '--pipeline-metadata' in sys.argv:
+                        send(20, bytes([client_extension]) + bencode({'msg_type': 7, 'piece': part}))
+                    for requested in reversed(requests):
+                        response = bytes([client_extension]) + bencode({'msg_type': 1, 'piece': requested,
+                            'total_size': len(info)}) + info[requested*16384:(requested+1)*16384]
+                        send(20, response)
+                        if '--pipeline-metadata' in sys.argv:
+                            send(20, response) # Duplicates must not count as progress twice.
+                    requests.clear()
                 elif kind == 2:
                     send(1)
                 elif kind == 6:
@@ -105,14 +129,17 @@ def main():
             pass
         finally:
             sock.close()
-    def tcp():
+    def tcp(port=19002, reject=False):
         server = socket.socket()
-        server.bind(('127.0.0.1', 19002))
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(('127.0.0.1', port))
         server.listen(16)
         while True:
             sock, _ = server.accept()
-            threading.Thread(target=peer, args=(sock,), daemon=True).start()
+            threading.Thread(target=peer, args=(sock,reject), daemon=True).start()
     threading.Thread(target=tcp, daemon=True).start()
+    if '--reject-peer' in sys.argv:
+        threading.Thread(target=tcp, args=(19003,True), daemon=True).start()
     udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp.bind(('127.0.0.1', 19001))
     magnet = 'magnet:?xt=urn:btih:' + info_hash.hex() + '&tr=' + quote('udp://127.0.0.1:19001/announce', safe='')
@@ -128,6 +155,8 @@ def main():
         elif action == 1:
             assert request[16:36] == info_hash
             reply = struct.pack('>IIIII', 1, transaction, 60, 0, 1) + socket.inet_aton('127.0.0.1') + struct.pack('>H', 19002)
+            if '--reject-peer' in sys.argv:
+                reply = reply[:20] + socket.inet_aton('127.0.0.1') + struct.pack('>H', 19003) + reply[20:]
         else:
             continue
         udp.sendto(reply, address)

@@ -1,3 +1,4 @@
+# Generated build output and Visual Studio files
 /dist/
 /nuvio_core_tests
 /VisualStudio2010/bin/
@@ -13,18 +14,21 @@ ipch/
 *.pdb
 *.idb
 *.ilk
-*.xex
-*.XEX
-*.log
-nuvio_session.dat
-nuvio_session.dat.tmp
-
-*.exe
-*.lib
 *.xdb
 *.tlog
+*.lastbuildstate
+*.unsuccessfulbuild
+*.log
+*.exe
+*.lib
+*.xex
+*.XEX
 
+# Local settings and session data (never commit credentials)
 /nuvio.cfg
+nuvio_session.dat
+nuvio_session.dat.tmp
 *.local
+
+# Helper scripts
 __pycache__/
-/dist/
