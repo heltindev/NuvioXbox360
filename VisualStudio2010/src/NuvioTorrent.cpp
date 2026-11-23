@@ -620,6 +620,12 @@ bool NuvioTorrentClearCache() {
     return true;
 #endif
 }
+int NuvioTorrent::StartupPercent() const {
+    // Stages are coarse because verified pieces are fetched on demand, not as a full download.
+    static const int progress[]={0,12,32,50,70,84,0};
+    const int stage=(int)m->phase;
+    return stage>=0&&stage<7?progress[stage]:0;
+}
 const char *NuvioTorrent::Status()const{
     static const char *status[]={"Preparando torrent...","Buscando peers/tracker/DHT...","Obtendo e verificando metadados...",
         "Torrent pronto; preparando video...","Carregando partes verificadas...","Reproduzindo torrent...","Falha no torrent."};
