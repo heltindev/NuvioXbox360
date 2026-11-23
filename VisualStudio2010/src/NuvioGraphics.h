@@ -23,6 +23,7 @@ public:
     void Icon(int index, float x, float y, float size, D3DCOLOR color);
     void Logo(float x, float y, float size);
     void Poster(int index, float x, float y, float w, float h);
+    void PosterRounded(int index,float x,float y,float w,float h,float radius,D3DCOLOR matte);
     void Avatar(int index, float x, float y, float size);
     bool UploadAvatar(int index, const unsigned char *rgba, int width, int height);
     bool HasAvatar(int index) const;
