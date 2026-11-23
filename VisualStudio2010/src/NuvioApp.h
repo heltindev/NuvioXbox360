@@ -85,17 +85,18 @@ struct NuvioState {
 
     // Online/offline state
     bool isOnline;
+    bool localMode;       // Local guest profiles require no Nuvio account or add-ons
 
     // Active profile
     char profileName[32];
     int profileIndex;
 
     // Login / profiles
-    int loginCursor;       // always 0: official Nuvio QR sign-in only
+    int loginCursor;       // 0 = Nuvio device sign-in; 1 = continue locally
     NuvioProfile profiles[NUVIO_MAX_PROFILES];
     int profileCount;
     bool cloudProfiles;
-    int profileCursor;     // profileCount means the "Add profile" tile
+    int profileCursor;     // profileCount = add-local (when eligible), last tile = connect account
     NuvioScreen profileReturn; // screen to restore when the avatar opens the picker
     int newProfileColor;
     NuvioScreen createReturn;
@@ -130,9 +131,9 @@ void NuvioPrevCatalogPage(NuvioState *state);
 
 // ---- Login and profiles ----
 void NuvioLoginMove(NuvioState *state, int direction);
-void NuvioLoginSelect(NuvioState *state);          // Sign in -> profile list, or Create profile
+void NuvioLoginSelect(NuvioState *state);          // QR sign-in, or enter local guest mode
 void NuvioProfileMove(NuvioState *state, int direction);
-// Returns 1 when a profile was entered (screen becomes HOME), 0 when "Add profile" opened the creator.
+// Returns 1 for a selected profile, 2 when connecting/switching Nuvio accounts, 0 otherwise.
 int NuvioProfileSelect(NuvioState *state);
 void NuvioProfilesEnsureAdmin(NuvioState *state);
 bool NuvioProfileAdd(NuvioState *state, const char *name, int color);

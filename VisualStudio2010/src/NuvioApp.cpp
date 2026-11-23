@@ -175,7 +175,7 @@ void NuvioBack(NuvioState *state)
             state->screen = NUVIO_SCREEN_ADDONS;
             break;
         case NUVIO_SCREEN_QR_LOGIN:
-            state->screen = NUVIO_SCREEN_LOGIN;
+            state->screen = state->localMode ? NUVIO_SCREEN_HOME : NUVIO_SCREEN_LOGIN;
             break;
         case NUVIO_SCREEN_CREATE_PROFILE:
             state->screen = state->createReturn;
@@ -289,23 +289,30 @@ void NuvioPrevCatalogPage(NuvioState *state)
 
 void NuvioLoginMove(NuvioState *state, int direction)
 {
-    // Account login is exclusively through the official Nuvio device QR flow.
-    (void)direction;
     if (!state || state->screen != NUVIO_SCREEN_LOGIN) return;
-    state->loginCursor = 0;
+    if (direction < 0) state->loginCursor = 0;
+    else if (direction > 0) state->loginCursor = 1;
 }
 
 void NuvioLoginSelect(NuvioState *state)
 {
     if (!state || state->screen != NUVIO_SCREEN_LOGIN) return;
-    state->loginCursor = 0;
-    state->screen = NUVIO_SCREEN_QR_LOGIN; // XboxMain starts official device login.
+    if (state->loginCursor == 1) {
+        state->localMode = true;
+        state->cloudProfiles = false;
+        state->profileIndex = 0;
+        NuvioProfilesEnsureAdmin(state);
+        NuvioOpenScreen(state, NUVIO_SCREEN_HOME);
+    } else {
+        state->localMode = false;
+        state->screen = NUVIO_SCREEN_QR_LOGIN; // XboxMain starts official device login.
+    }
 }
 
 void NuvioProfileMove(NuvioState *state, int direction)
 {
     if (!state || state->screen != NUVIO_SCREEN_PROFILE) return;
-    const int tiles = state->profileCount + (!state->cloudProfiles && state->profileCount < NUVIO_MAX_PROFILES ? 1 : 0);
+    const int tiles = state->profileCount + (!state->cloudProfiles && state->profileCount < NUVIO_MAX_PROFILES ? 1 : 0) + 1;
     state->profileCursor += direction;
     if (state->profileCursor < 0) state->profileCursor = 0;
     if (state->profileCursor > tiles - 1) state->profileCursor = tiles - 1;
@@ -317,15 +324,21 @@ int NuvioProfileSelect(NuvioState *state)
     if (state->profileCursor >= 0 && state->profileCursor < state->profileCount) {
         if (state->profiles[state->profileCursor].locked) return 0; // PIN screen is not implemented yet.
         state->profileIndex = state->profileCursor;
+        state->localMode = !state->cloudProfiles;
         CopyText(state->profileName, sizeof(state->profileName),
                  state->profiles[state->profileIndex].name);
         state->screen = NUVIO_SCREEN_LOGIN; // so OpenScreen accepts the target below
         NuvioOpenScreen(state, NUVIO_SCREEN_HOME);
         return 1;
     }
-    if (state->cloudProfiles) return 0;
-    StartCreateProfile(state, NUVIO_SCREEN_PROFILE);
-    return 0;
+    if (!state->cloudProfiles && state->profileCount < NUVIO_MAX_PROFILES &&
+        state->profileCursor == state->profileCount) {
+        StartCreateProfile(state, NUVIO_SCREEN_PROFILE);
+        return 0;
+    }
+    const int connectTile = state->profileCount +
+        (!state->cloudProfiles && state->profileCount < NUVIO_MAX_PROFILES ? 1 : 0);
+    return state->profileCursor == connectTile ? 2 : 0;
 }
 
 void NuvioProfilesEnsureAdmin(NuvioState *state)
@@ -569,26 +582,11 @@ int NuvioKeyboardPress(NuvioState *state)
 
 // ================= Plugins (Stremio add-ons) =================
 
-static void SetAddon(NuvioAddonList *list, int enabled, const char *name,
-                     const char *desc, const char *url)
-{
-    if (list->count >= NUVIO_MAX_ADDONS) return;
-    NuvioAddon &a = list->items[list->count];
-    a.id = list->count + 1;
-    a.enabled = enabled;
-    CopyText(a.name, sizeof(a.name), name);
-    CopyText(a.desc, sizeof(a.desc), desc);
-    CopyText(a.url, sizeof(a.url), url);
-    ++list->count;
-}
-
 void NuvioAddonsLoadDefaults(NuvioAddonList *list)
 {
     if (!list) return;
     std::memset(list, 0, sizeof(*list));
-    // Only the official catalog is offered locally; installed addons come from cloud.
-    SetAddon(list, 1, "Nuvio Catalog Addon", "Automatic catalog fallback",
-             "https://catalog.nuvio.tv/manifest.json");
+    // The local guest has no add-ons; signed-in users sync their own cloud add-ons.
 }
 
 bool NuvioAddonsParse(NuvioAddonList *list, const char *text, int length)

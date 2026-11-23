@@ -357,8 +357,10 @@ struct NuvioTorrent::Impl {
     }
     bool Metadata() {
         phase=2;
-        DWORD totalDeadline=GetTickCount()+45000;
-        for(size_t p=0;p<peers.size()&&p<8&&!quit&&(LONG)(totalDeadline-GetTickCount())>0;++p) {
+        // A tracker may return many peers that do not implement BEP 9. Probe
+        // more candidates before claiming no compatible metadata source exists.
+        DWORD totalDeadline=GetTickCount()+90000;
+        for(size_t p=0;p<peers.size()&&p<32&&!quit&&(LONG)(totalDeadline-GetTickCount())>0;++p) {
             if(!ConnectPeer((int)p))continue;
             DWORD deadline=GetTickCount()+10000;
             int metadataSize=0;
@@ -415,7 +417,11 @@ struct NuvioTorrent::Impl {
                 std::string filename=path.list.empty()?"video":path.list.back().text;
                 std::string lower=filename;for(size_t c=0;c<lower.size();++c)if(lower[c]>='A'&&lower[c]<='Z')lower[c]+='a'-'A';
                 bool video=lower.find(".mp4")!=std::string::npos||lower.find(".mkv")!=std::string::npos||
-                    lower.find(".avi")!=std::string::npos||lower.find(".wmv")!=std::string::npos;
+                    lower.find(".avi")!=std::string::npos||lower.find(".wmv")!=std::string::npos||
+                    lower.find(".m4v")!=std::string::npos||lower.find(".mov")!=std::string::npos||
+                    lower.find(".webm")!=std::string::npos||lower.find(".ts")!=std::string::npos||
+                    lower.find(".m2ts")!=std::string::npos||lower.find(".mpg")!=std::string::npos||
+                    lower.find(".mpeg")!=std::string::npos||lower.find(".flv")!=std::string::npos;
                 if((selectedFile>=0&&(int)i==selectedFile)||(selectedFile<0&&video&&size>largest)) {
                     fileOffset=totalSize;fileSize=size;name=filename;largest=size;
                 }
@@ -514,10 +520,25 @@ bool NuvioTorrent::Open(const std::string &magnet,std::string &error) {
     if(!m->Magnet(magnet)){error=m->error;return false;}
     unsigned char random[20];Random(random,20);m->peerId.assign((char*)random,20);m->peerId.replace(0,8,"-NV3601-");
     m->phase=1;
-    for(size_t i=0;i<m->trackers.size()&&!m->quit&&m->peers.empty();++i)m->Tracker(m->trackers[i]);
+    // Do not stop at the first tracker: it may return TCP-incompatible or
+    // non-BEP9 peers even when other trackers know usable seeds.
+    for(size_t i=0;i<m->trackers.size()&&i<6&&!m->quit&&m->peers.size()<32;++i)
+        m->Tracker(m->trackers[i]);
     if(m->peers.empty()&&!m->quit)m->Dht();
     if(m->peers.empty())m->Fail(m->quit?"Torrent cancelado.":"Nenhum peer encontrado. Verifique trackers, DHT e seeders.");
-    if(m->peers.empty()||!m->Metadata()||!m->FileInfo()){error=m->error;return false;}
+    if(!m->peers.empty()&&!m->Metadata()&&!m->quit) {
+        // Try a fresh DHT peer set after the tracker candidates failed.
+        std::vector<Endpoint> fromTrackers=m->peers;
+        m->peers.clear();
+        m->Dht();
+        const bool foundDhtPeers=!m->peers.empty();
+        for(size_t i=0;i<fromTrackers.size()&&m->peers.size()<64;++i)
+            if(std::find(m->peers.begin(),m->peers.end(),fromTrackers[i])==m->peers.end())
+                m->peers.push_back(fromTrackers[i]);
+        if(foundDhtPeers) {m->error.clear();m->Metadata();}
+        else m->phase=6; // Do not retry the same failed tracker peers indefinitely.
+    }
+    if(m->peers.empty()||m->metadata.empty()||!m->FileInfo()){error=m->error;return false;}
     return true;
 }
 int NuvioTorrent::Read(unsigned char *bytes,int count) {

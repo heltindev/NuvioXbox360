@@ -50,11 +50,17 @@ int main(int argc, char **argv)
     NuvioBack(&state);
     assert(state.screen == NUVIO_SCREEN_LOGIN);
 
-    // ---- Only QR code can start account login ----
+    // ---- Choosing local mode never creates an account session or add-ons ----
     NuvioLoginMove(&state, 1);
+    assert(state.loginCursor == 1);
+    NuvioLoginSelect(&state);
+    assert(state.screen == NUVIO_SCREEN_HOME && state.localMode);
+    state.screen = NUVIO_SCREEN_LOGIN;
+    NuvioLoginMove(&state, -1);
     assert(state.loginCursor == 0);
     NuvioLoginSelect(&state);
     assert(state.screen == NUVIO_SCREEN_QR_LOGIN);
+    assert(!state.localMode);
     // Simulate the Xbox completing remote QR approval and showing profiles.
     state.screen = NUVIO_SCREEN_PROFILE;
 
@@ -83,6 +89,11 @@ int main(int argc, char **argv)
     assert(state.screen == NUVIO_SCREEN_CREATE_PROFILE);
     NuvioBack(&state);
     assert(state.screen == NUVIO_SCREEN_PROFILE);
+
+    state.profileCursor = state.profileCount + 1;  // explicit account connection tile
+    assert(NuvioProfileSelect(&state) == 2);
+    assert(state.screen == NUVIO_SCREEN_PROFILE);
+    state.profileCursor = state.profileCount;
 
     NuvioProfileMove(&state, -1);
     assert(NuvioProfileSelect(&state) == 1);        // enter Maria
@@ -172,9 +183,8 @@ int main(int argc, char **argv)
     // ---- Plugin list ----
     NuvioAddonList addons;
     NuvioAddonsLoadDefaults(&addons);
-    assert(addons.count == 1);
-    assert(addons.items[0].enabled && std::strstr(addons.items[0].url, "catalog.nuvio.tv"));
-    assert(NuvioAddonsEnabledCount(&addons) == 1);
+    assert(addons.count == 0 && !addons.fromCloud);
+    assert(NuvioAddonsEnabledCount(&addons) == 0);
 
     const char *tsv = "1\t1\tCinemeta\tCatalog\thttps://v3-cinemeta.strem.io/manifest.json\n"
                       "2\t0\tTorrentio\t\thttps://example.com/manifest.json\n";

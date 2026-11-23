@@ -53,6 +53,11 @@ static bool RefreshToken();
 
 struct Art { std::string id, poster, background, kind, title, base, description; picojson::value metadata; };
 static std::vector<Art> s_art;
+static std::vector<Art> s_libraryArtCache;
+static std::string s_libraryTextCache;
+static int s_libraryCacheProfile = 0;
+static DWORD s_libraryCachedAt = 0;
+static const DWORD kLibraryCacheMs = 5 * 60 * 1000;
 struct CloudAddon {
     std::string base, name;
     bool enabled;
@@ -74,6 +79,8 @@ static void LoadManifest(CloudAddon &a);
 static void ClearProfileData() {
     s_sources.clear();
     s_art.clear(); s_addons.clear(); s_owner.clear();
+    s_libraryArtCache.clear(); s_libraryTextCache.clear();
+    s_libraryCacheProfile = 0; s_libraryCachedAt = 0;
     s_profile = s_addonProfile = 0;
     s_addonsLoaded = s_addonsComplete = false;
     for (int i = 0; i < 7; ++i) {
@@ -514,15 +521,24 @@ static std::string AddLibrary(int profileIndex, const std::string &imdbId) {
     picojson::value reply;
     if (!Api("POST", "/rest/v1/rpc/sync_push_library_items", s_access,
              picojson::value(request).serialize(), reply)) return "";
+    // An added title must appear on the next library visit.
+    s_libraryTextCache.clear(); s_libraryCachedAt = 0;
     return "OK\n";
 }
 
-static std::string LibraryCatalog() {
+static std::string LibraryCatalog(bool refresh = false) {
     if (!EnsureAuth() || s_profile < 1) return "";
+    if (!refresh && s_libraryCacheProfile == s_profile &&
+        !s_libraryTextCache.empty() &&
+        (DWORD)(GetTickCount() - s_libraryCachedAt) < kLibraryCacheMs)
+        return s_libraryTextCache;
     char args[90]; std::sprintf(args, "{\"p_profile_id\":%d,\"p_limit\":240,\"p_offset\":0}", s_profile);
     picojson::value data;
     if (!Api("POST", "/rest/v1/rpc/sync_pull_library", s_access, args, data) ||
-        !data.is<picojson::array>()) return "";
+        !data.is<picojson::array>()) {
+        // Keep an already verified snapshot usable during temporary outages.
+        return s_libraryCacheProfile == s_profile ? s_libraryTextCache : "";
+    }
     const picojson::array &rows = data.get<picojson::array>();
     std::vector<Art> art;
     std::string out = "#catalog\n";
@@ -544,6 +560,10 @@ static std::string LibraryCatalog() {
         art.push_back(item);
     }
     s_art.swap(art);
+    s_libraryArtCache = s_art;
+    s_libraryTextCache = out;
+    s_libraryCacheProfile = s_profile;
+    s_libraryCachedAt = GetTickCount();
     return out;
 }
 
@@ -849,19 +869,9 @@ static bool RequiresFilter(const picojson::value &catalog, bool search) {
 static std::string Catalog(int page, const std::string &query) {
     if (s_profile < 1 || !EnsureAuth()) return "";
     if (!s_addonsLoaded && !PullAddons()) return "";
-    // The default catalog is a local fallback, never silently pushed to the account.
+    // Only use add-ons explicitly installed for the active Nuvio account.
+    // A guest or an account with no add-ons must not inherit a hidden default.
     std::vector<CloudAddon> sources = s_addons;
-    bool hasCatalog = false, officialInstalled = false;
-    for (size_t i = 0; i < sources.size(); ++i) {
-        if (Canonical(sources[i].base).find(kDefaultCatalog) == 0) officialInstalled = true;
-        if (!sources[i].enabled) continue;
-        LoadManifest(sources[i]);
-        const picojson::value &cs = Field(sources[i].manifest, "catalogs");
-        if (cs.is<picojson::array>() && !cs.get<picojson::array>().empty()) hasCatalog = true;
-    }
-    if (sources.empty() || (!hasCatalog && !officialInstalled)) {
-        CloudAddon a; a.base = kDefaultCatalog; a.enabled = true; sources.push_back(a);
-    }
     std::vector<Art> art;
     std::string out = "#catalog\n";
     int rails = 0, attempted = 0, succeeded = 0;
@@ -931,6 +941,10 @@ static std::string Catalog(int page, const std::string &query) {
 
 static Art *Artwork(const std::string &id) {
     for (size_t i = 0; i < s_art.size(); ++i) if (s_art[i].id == id) return &s_art[i];
+    // Artwork and stream metadata remain available after changing catalog tabs.
+    if (s_libraryCacheProfile == s_profile)
+        for (size_t i = 0; i < s_libraryArtCache.size(); ++i)
+            if (s_libraryArtCache[i].id == id) return &s_libraryArtCache[i];
     return NULL;
 }
 
@@ -1187,6 +1201,11 @@ bool NuvioNativeGet(const char *path, int maxBody, NuvioHttpData *out) {
     }
     else if (p == "/account/poll") { PollLogin(); body = AccountStatus(); }
     else if (p == "/account/status") { body = AccountStatus(); }
+    else if (p == "/account/restore") {
+        // Refresh an already saved session without starting device pairing.
+        if (s_accountState == 2) EnsureAuth();
+        body = AccountStatus();
+    }
     else if (p == "/account/logout") {
         ClearSession();
         s_nonce.clear(); s_deviceCode.clear(); s_userCode.clear(); s_qrUrl.clear();
@@ -1199,7 +1218,8 @@ bool NuvioNativeGet(const char *path, int maxBody, NuvioHttpData *out) {
         if (SelectProfile(std::atoi(p.c_str() + 19))) body = "OK\n";
     }
     else if (p == "/addons") body = Addons();
-    else if (p == "/library/catalog.tsv") body = LibraryCatalog();
+    else if (p.find("/library/catalog.tsv") == 0)
+        body = LibraryCatalog(p.find("refresh=1") != std::string::npos);
     else if (p.find("/videos?id=") == 0) body = Videos(Decode(p.substr(11)));
     else if (p.find("/sources?id=") == 0) {
         const size_t at = p.find("&episode=");
