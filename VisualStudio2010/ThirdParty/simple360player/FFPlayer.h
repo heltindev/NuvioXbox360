@@ -210,6 +210,7 @@ private:
     bool                       m_active;
     volatile LONG              m_opened;
     volatile LONG              m_ended;
+    volatile LONG              m_playbackFailure; // worker publishes a code; UI owns m_error
     bool                       m_paused;
     DWORD                      m_wallStart;     // clock for files without audio
     double                     m_wallBase;

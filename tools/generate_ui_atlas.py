@@ -16,18 +16,21 @@ from PIL import Image, ImageDraw, ImageFont
 W = H = 512
 CELL_W = 40
 CELL_H = 48
-ICON_Y = 388
+ICON_Y = 384
 ICON_CELL = 64
+ICON_COLUMNS = 8
+ICON_COUNT = 9
 
 
 def make_icons(image):
     # Render vectors at 4x and downsample for antialiasing.
     scale = 4
-    canvas = Image.new("L", (ICON_CELL * 5 * scale, ICON_CELL * scale))
+    canvas = Image.new("L", (W * scale, ICON_CELL * 2 * scale))
     draw = ImageDraw.Draw(canvas)
 
     def xy(index, x, y):
-        return ((index * ICON_CELL + x) * scale, y * scale)
+        return (((index % ICON_COLUMNS) * ICON_CELL + x) * scale,
+                ((index // ICON_COLUMNS) * ICON_CELL + y) * scale)
 
     def line(index, coords, width=3, joint="curve"):
         draw.line([xy(index, x, y) for x, y in coords], fill=255, width=width * scale, joint=joint)
@@ -62,7 +65,27 @@ def make_icons(image):
     draw.polygon(points, fill=255)
     draw.ellipse((*xy(4, 23, 23), *xy(4, 41, 41)), fill=0)
 
-    canvas = canvas.resize((ICON_CELL * 5, ICON_CELL), Image.Resampling.LANCZOS)
+    # Account: head and shoulders, matching the settings reference.
+    draw.ellipse((*xy(5, 24, 12), *xy(5, 40, 28)), fill=255)
+    draw.pieslice((*xy(5, 15, 32), *xy(5, 49, 62)), 180, 360, fill=255)
+    draw.rectangle((*xy(5, 15, 45), *xy(5, 49, 49)), fill=255)
+
+    # Visual: painter's palette, with transparent paint wells and thumb opening.
+    draw.ellipse((*xy(6, 10, 10), *xy(6, 54, 54)), fill=255)
+    draw.ellipse((*xy(6, 32, 35), *xy(6, 57, 59)), fill=0)
+    for x, y in [(20, 26), (28, 19), (39, 21), (46, 30)]:
+        draw.ellipse((*xy(6, x-3, y-3), *xy(6, x+3, y+3)), fill=0)
+
+    # Media: filled playback triangle.
+    draw.polygon([xy(7, 22, 13), xy(7, 49, 32), xy(7, 22, 51)], fill=255)
+
+    # Services: two interlocking chain links.
+    for x0, x1 in [(10, 36), (28, 54)]:
+        draw.rounded_rectangle((*xy(8, x0, 22), *xy(8, x1, 42)),
+                               radius=10*scale, outline=255, width=4*scale)
+    line(8, [(24, 32), (40, 32)], width=4)
+
+    canvas = canvas.resize((W, ICON_CELL * 2), Image.Resampling.LANCZOS)
     image.paste(canvas, (0, ICON_Y))
 
 
@@ -98,7 +121,7 @@ def main():
             raw.extend(bytes([packed[i + 1]]) * packed[i])
         assert len(raw) == W * H and len(advances) == 96
         bitmap = Image.frombytes("L", (W, H), bytes(raw))
-        ImageDraw.Draw(bitmap).rectangle((0, ICON_Y, W, ICON_Y + ICON_CELL), fill=0)
+        ImageDraw.Draw(bitmap).rectangle((0, ICON_Y, W, H), fill=0)
     else:
         font = ImageFont.truetype(str(args.font), 31)
         for code in range(32, 128):
@@ -127,7 +150,7 @@ def main():
         "#ifndef NUVIO_UI_ATLAS_H\n#define NUVIO_UI_ATLAS_H\n"
         "enum { NUVIO_ATLAS_WIDTH = 512, NUVIO_ATLAS_HEIGHT = 512, "
         "NUVIO_FONT_CELL_W = 40, NUVIO_FONT_CELL_H = 48, "
-        "NUVIO_ICON_TOP = 388 };\n"
+        "NUVIO_ICON_TOP = 384, NUVIO_ICON_COLUMNS = 8, NUVIO_ICON_COUNT = 9 };\n"
         "static const unsigned char kNuvioGlyphAdvance[96] = {\n" + "\n".join(glyphs) + "\n};\n"
         "static const unsigned char kNuvioGlyphInk[96][4] = {\n" +
         "\n".join("    {" + ",".join(map(str, box)) + "}," for box in bounds) + "\n};\n"

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -770,6 +770,7 @@
     <ClCompile Include="..\..\libavcodec\vp6dsp.c" />
     <ClCompile Include="..\..\libavcodec\vqavideo.c" />
     <ClCompile Include="..\..\libavcodec\w32thread.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Xbox 360'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Xbox 360'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_LTCG|Xbox 360'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ffplay_debug|Xbox 360'">true</ExcludedFromBuild>
@@ -840,7 +841,8 @@
     <ClCompile Include="..\..\libavcodec\xbox360\h264_idtc_vmx.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Xbox 360'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="..\..\libavcodec\xbox360\h264_luma_vmx.c" />
+    <ClCompile Include="..\..\libavcodec\xbox360\h264_luma_vmx.c"><ExcludedFromBuild>true</ExcludedFromBuild></ClCompile>
+    <ClCompile Include="..\..\libavcodec\xbox360\h264_weight_xb.c" />
     <ClCompile Include="..\..\libavcodec\xbox360\h264_chroma_xb.c" />
     <ClCompile Include="..\..\libavcodec\xbox360\h264_qpel_xb.c" />
     <ClCompile Include="..\..\libavcodec\xbox360\h264_template_vmx.c">

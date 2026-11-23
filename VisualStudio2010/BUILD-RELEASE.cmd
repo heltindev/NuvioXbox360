@@ -5,5 +5,5 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-echo Copy Release\NUVIO.xex to your Xbox and check Xbox UI6 in Settings.
+echo Copy Release\NUVIO.xex to your Xbox and check Xbox UI8 in Settings.
 pause

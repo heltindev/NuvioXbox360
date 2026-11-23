@@ -13,7 +13,7 @@
 static int g_decodeThreads = 4;
 static int g_stereo = 1;
 
-void fg_set_decode_threads( int n ) { g_decodeThreads = n < 1 ? 1 : ( n > 6 ? 6 : n ); }
+void fg_set_decode_threads( int n ) { g_decodeThreads = n < 1 ? 1 : ( n > 4 ? 4 : n ); }
 void fg_set_stereo( int on ) { g_stereo = on; }
 
 /* Container stream index of the audio track to play (-1 = first audio track). */
@@ -370,6 +370,17 @@ int fg_decode_video( FgMedia* m, FgPacket* p, FgPicture* pic )
     return 1;
 }
 
+int fg_vmx_weight_status(void)
+{
+    extern int ff_xb_h264_weight_status(void);
+    return ff_xb_h264_weight_status();
+}
+void fg_set_vmx_enabled(int enabled)
+{
+    extern void ff_xb_set_vmx_enabled(int enabled);
+    ff_xb_set_vmx_enabled(enabled);
+}
+
 int fg_decode_audio( FgMedia* m, FgPacket* p, short* pcm, int pcmBytes, double* pts )
 {
     AVPacket pkt = p->pkt;     /* shallow copy: data/size advance as frames are consumed */
@@ -423,9 +434,9 @@ void fg_set_fast( FgMedia* m, int level )
 void ff_xb_h264_profile( int64_t* cabac, int64_t* recon, int64_t* filter, int reset );
 
 extern volatile __int64 ff_xb_await_ticks;   /* xb_thread.c */
-extern int ff_xb_chroma_verdict;             /* xbox360/h264_chroma_xb.c */
+extern volatile long ff_xb_chroma_verdict;   /* xbox360/h264_chroma_xb.c */
 
-extern int ff_xb_qpel_verdict;               /* xbox360/h264_qpel_xb.c */
+extern volatile long ff_xb_qpel_verdict;     /* xbox360/h264_qpel_xb.c */
 
 int fg_vmx_status( void ) { return ff_xb_chroma_verdict; }
 int fg_vmx_qpel_status( void ) { return ff_xb_qpel_verdict; }

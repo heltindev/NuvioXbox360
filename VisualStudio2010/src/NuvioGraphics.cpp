@@ -272,6 +272,19 @@ void NuvioGraphics::Text(float x, float y, float fontSize, const char *text,
     }
 }
 
+float NuvioGraphics::MeasureText(float fontSize,const char *text) const
+{
+    if(!text||fontSize<=0)return 0;
+    float width=0,maxWidth=0;
+    for(;*text;++text) {
+        if(*text=='\n') {if(width>maxWidth)maxWidth=width;width=0;continue;}
+        int c=static_cast<unsigned char>(*text);
+        if(c<32||c>127)c='?';
+        width+=kNuvioGlyphAdvance[c-32]*(fontSize/31.0f);
+    }
+    return width>maxWidth?width:maxWidth;
+}
+
 void NuvioGraphics::CenteredGlyph(float cx,float cy,float fontSize,char glyph,D3DCOLOR color)
 {
     const int index=(unsigned char)glyph-32;
@@ -284,11 +297,13 @@ void NuvioGraphics::CenteredGlyph(float cx,float cy,float fontSize,char glyph,D3
 
 void NuvioGraphics::Icon(int index, float x, float y, float size, D3DCOLOR color)
 {
-    if (index < 0 || index >= 5) return;
-    Quad(x, y, size, size, float(index * 64) / NUVIO_ATLAS_WIDTH,
-         float(NUVIO_ICON_TOP) / NUVIO_ATLAS_HEIGHT,
-         float((index + 1) * 64) / NUVIO_ATLAS_WIDTH,
-         float(NUVIO_ICON_TOP + 64) / NUVIO_ATLAS_HEIGHT, m_font, color);
+    if (index < 0 || index >= NUVIO_ICON_COUNT) return;
+    const int left=(index%NUVIO_ICON_COLUMNS)*64;
+    const int top=NUVIO_ICON_TOP+(index/NUVIO_ICON_COLUMNS)*64;
+    Quad(x, y, size, size, float(left) / NUVIO_ATLAS_WIDTH,
+         float(top) / NUVIO_ATLAS_HEIGHT,
+         float(left + 64) / NUVIO_ATLAS_WIDTH,
+         float(top + 64) / NUVIO_ATLAS_HEIGHT, m_font, color);
 }
 
 bool NuvioGraphics::UploadPoster(int index, const unsigned char *rgba, int width, int height)

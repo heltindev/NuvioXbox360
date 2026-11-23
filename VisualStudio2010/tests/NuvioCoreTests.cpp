@@ -161,15 +161,19 @@ int main(int argc, char **argv)
     assert(state.screen == NUVIO_SCREEN_SETTINGS);
     assert(state.sidebarItem==3 && state.settingsCategoriesFocused);
     assert(NuvioSettingsItemCount(0)==3 && NuvioSettingsItemCount(2)==2);
-    assert(!NuvioSettingsItemEnabled(0,0));
+    assert(NuvioSettingsItemEnabled(0,0));
     assert(NuvioSettingsItemEnabled(0,1));
     assert(!NuvioSettingsItemEnabled(1,0));
     assert(NuvioSettingsItemEnabled(2,0) && NuvioSettingsItemEnabled(2,1));
     assert(!NuvioSettingsItemEnabled(4,1));
-    NuvioSelect(&state,-1); // Enter "Voce" category; "Conta" is disabled.
+    NuvioSelect(&state,-1); // Enter "Voce", then open account information.
     assert(!state.settingsCategoriesFocused);
     NuvioSelect(&state,-1);
-    assert(state.screen==NUVIO_SCREEN_SETTINGS);
+    assert(state.screen==NUVIO_SCREEN_ACCOUNT);
+    assert(NuvioInputDuringLoadMask(state,true)&0x1000); // sign-out can be queued
+    NuvioBack(&state);
+    assert(state.screen==NUVIO_SCREEN_SETTINGS && state.settingsCategory==0 &&
+        state.selectedRow==0 && !state.settingsCategoriesFocused && !state.sidebarFocused);
     NuvioMoveVertical(&state,1,3);
     NuvioSelect(&state,-1); // Alternar perfil is implemented.
     assert(state.screen==NUVIO_SCREEN_PROFILE);
@@ -196,6 +200,34 @@ int main(int argc, char **argv)
     NuvioBack(&state);
     assert(state.screen==NUVIO_SCREEN_HOME);
     NuvioOpenScreen(&state,NUVIO_SCREEN_SETTINGS);
+
+    // ---- Search remains responsive during both catalog and artwork loading ----
+    NuvioState search;
+    NuvioInitialize(&search);
+    NuvioOpenScreen(&search,NUVIO_SCREEN_SEARCH);
+    NuvioKeyboardBegin(&search,NUVIO_KEYBOARD_SEARCH,search.searchQuery);
+    for(int busy=0;busy<2;++busy) {
+        const unsigned short mask=NuvioInputDuringLoadMask(search,busy!=0);
+        assert((mask&0xF31F)==0xF31F); // A/B/X/Y, Shift, Start and arrows
+        TypeText(&search,"percy");
+        NuvioKeyboardSpace(&search);
+        TypeText(&search,"jacksox");
+        NuvioKeyboardBackspace(&search);
+        TypeText(&search,"n");
+        assert(!std::strcmp(search.textBuffer,"percy jackson"));
+        // Submit exactly the visible text, including changes made while loading.
+        std::strcpy(search.searchQuery,search.textBuffer);
+        NuvioSearchSubmit(&search);
+        assert(search.screen==NUVIO_SCREEN_SEARCH_RESULTS && !search.searchActive);
+        NuvioBack(&search);
+        NuvioKeyboardBegin(&search,NUVIO_KEYBOARD_SEARCH,search.searchQuery);
+        assert(!std::strcmp(search.textBuffer,"percy jackson"));
+        NuvioKeyboardBegin(&search,NUVIO_KEYBOARD_SEARCH,"");
+    }
+    NuvioBack(&search);
+    assert(search.screen==NUVIO_SCREEN_HOME);
+    assert(NuvioInputDuringLoadMask(search,true)&0x8000); // Y can reopen search
+    assert(!(NuvioInputDuringLoadMask(search,true)&0x1000)); // no stale detail request
 
     // ---- Plugin list ----
     NuvioAddonList addons;

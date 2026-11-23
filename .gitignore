@@ -28,7 +28,11 @@ ipch/
 /nuvio.cfg
 nuvio_session.dat
 nuvio_session.dat.tmp
+nuvio_home.cache
+nuvio_search.cache
+nuvio_last_torrent.meta
 *.local
 
 # Helper scripts
 __pycache__/
+/ffmpeg360-h264-xenon-main/

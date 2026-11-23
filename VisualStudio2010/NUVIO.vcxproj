@@ -104,9 +104,10 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="CopyXboxRelease" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Release|Xbox 360'">
     <Error Condition="!Exists('$(OutDir)$(TargetName).xex')" Text="NUVIO.xex was not generated; do not deploy an older executable." />
+    <Exec Command="python &quot;$(ProjectDir)..\tools\audit_xenon_vmx.py&quot; &quot;$(OutDir)$(TargetName).exe&quot; --report &quot;$(ProjectDir)obj\xenon-app-opcodes.json&quot;" />
     <MakeDir Directories="$(ProjectDir)Release" />
     <Copy SourceFiles="$(OutDir)$(TargetName).xex" DestinationFiles="$(ProjectDir)Release\$(TargetName).xex" />
-    <Message Importance="high" Text="Xbox UI6 ready: $(ProjectDir)Release\$(TargetName).xex" />
+    <Message Importance="high" Text="Xbox UI8 ready: $(ProjectDir)Release\$(TargetName).xex" />
   </Target>
   <ImportGroup Label="ExtensionTargets" />
 </Project>

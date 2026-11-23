@@ -1,5 +1,20 @@
 #ifndef NUVIO_INPUT_H
 #define NUVIO_INPUT_H
+#include "NuvioApp.h"
+
+// XInput button bits, shared with the portable regression tests. Search only
+// edits local text and queues a request; artwork must never block its keyboard.
+inline unsigned short NuvioInputDuringLoadMask(const NuvioState &state,bool catalogLoading) {
+    if(state.screen==NUVIO_SCREEN_SEARCH)return 0xFFFF;
+    unsigned short mask=0x000F|0x0020|0x2000; // directions, Back, B
+    const bool browse=state.screen==NUVIO_SCREEN_HOME||state.screen==NUVIO_SCREEN_DISCOVER||
+        state.screen==NUVIO_SCREEN_LIBRARY||state.screen==NUVIO_SCREEN_SEARCH_RESULTS;
+    if(browse)mask|=0x8000; // Y opens search locally, even while catalog loads.
+    if(!catalogLoading&&browse&&!state.sidebarFocused)mask|=0x1000;
+    if(state.screen==NUVIO_SCREEN_ACCOUNT)mask|=0x1000; // queues sign-out until idle
+    if(state.screen==NUVIO_SCREEN_SETTINGS)mask|=0x8000; // open account
+    return mask;
+}
 // Portable, per-controller input policy. Diagonals choose the dominant axis.
 struct NuvioInputRepeat {
     unsigned short held;

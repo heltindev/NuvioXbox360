@@ -42,14 +42,34 @@ int main() {
     assert(Http::RequestHeaders("GET", "/image.png", "host", "", 0).find("Accept: */*") != std::string::npos);
     Boot(); assert(s_accountState == 0);
     s_refresh = "test-logout-token"; s_access = "test-logout-access"; s_accountState = 2;
+    s_email="old@example.invalid";s_profile=2;s_profileAllowed[2]=true;
+    s_avatarUrls[2]="https://example.invalid/avatar";
+    s_nonce="old-nonce";s_deviceCode="old-code";s_userCode="OLD";s_qrUrl="https://example.invalid/old";
     assert(SaveSession());
     NuvioHttpData logout;
     assert(NuvioNativeGet("/account/logout", 4096, &logout));
     delete[] logout.bytes;
     assert(s_accountState == 0 && ReadCache().empty());
-    Boot(); assert(s_accountState == 0);
+    assert(s_access.empty() && s_refresh.empty() && s_email.empty() && s_profile==0);
+    assert(s_nonce.empty() && s_deviceCode.empty() && s_userCode.empty() && s_qrUrl.empty());
+    assert(!s_profileAllowed[2] && s_avatarUrls[2].empty());
+    // The UI immediately requests /account/restart without rebooting the app.
     Reply("start_device_login_session", 200, "[{\"device_code\":\"test-code\",\"user_code\":\"ABCD\",\"verification_uri_complete\":\"https://nuvio.tv/link?code=test\"}]");
-    StartLogin(); assert(s_accountState == 1);
+    NuvioHttpData restarted;
+    assert(NuvioNativeGet("/account/restart",4096,&restarted));
+    delete[] restarted.bytes;
+    assert(s_accountState == 1 && s_userCode=="ABCD");
+    const std::string qr=QrBytes();
+    assert(qr.size()>5 && qr.substr(0,4)=="NVQM");
+    const int qrSize=(unsigned char)qr[4];
+    assert(qr.size()==5+qrSize*qrSize);
+    bool hasModules=false;
+    for(int y=0;y<qrSize;++y)for(int x=0;x<qrSize;++x) {
+        const bool dark=qr[5+y*qrSize+x]!=0;
+        if(x<4||y<4||x>=qrSize-4||y>=qrSize-4)assert(!dark);
+        hasModules=hasModules||dark;
+    }
+    assert(hasModules);
     Reply("poll_tv_login_session", 200, "[{\"status\":\"approved\"}]");
     Reply("tv-logins-exchange", 200, "{\"access_token\":\"test-access\",\"refresh_token\":\"test-refresh-1\",\"expires_in\":3600,\"user\":{\"email\":\"test@example.invalid\"}}");
     PollLogin(); assert(s_accountState == 2);

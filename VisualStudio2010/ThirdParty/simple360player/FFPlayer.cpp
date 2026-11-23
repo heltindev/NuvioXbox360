@@ -102,6 +102,7 @@ namespace
     HANDLE StartThread( LPTHREAD_START_ROUTINE fn, LPVOID arg, DWORD cpu )
     {
         HANDLE h = Guard_CreateThread( 256 * 1024, fn, arg, CREATE_SUSPENDED );
+        if(!h)return NULL;
         XSetThreadProcessor( h, cpu );
         ResumeThread( h );
         return h;
@@ -117,7 +118,7 @@ FFPlayer::FFPlayer()
       m_audioBasePts( 0 ), m_audioStarted( 0 ), m_quit( 0 ), m_seekRequest( 0 ), m_seekTarget( 0 ),
       m_preparingConversion(0), m_flushing( 0 ), m_decodersParked( 0 ), m_current( 0 ), m_stream( NULL ), m_torrent( NULL ), m_subWanted( -1 ), m_subChanged( 0 ), m_file( INVALID_HANDLE_VALUE ), m_streamPos( 0 ),
       m_streamSize( -1 ), m_media( NULL ), m_hasAudio( false ), m_hasVideo( false ), m_lastShowTick( 0 ), m_duration( 0 ), m_startSeconds( 0 ), m_timeOffset( 0 ),
-      m_active( false ), m_opened( 0 ), m_ended( 0 ), m_paused( false ), m_wallStart( 0 ), m_wallBase( 0 ),
+      m_active( false ), m_opened( 0 ), m_ended( 0 ), m_playbackFailure(0), m_paused( false ), m_wallStart( 0 ), m_wallBase( 0 ),
       m_lastPts( 0 ), m_decoded( 0 ), m_dropped( 0 ), m_shown( 0 ), m_catchups( 0 ), m_bytesRead( 0 ), m_skippingB( false ), m_catchLevel( 0 ), m_seekFloor( -1.0 ), m_reachingFloor( 0 ), m_speedTest( false ),
       m_aspect( ASPECT_AUTO ), m_pixelAspect( 1.0 ), m_tvAspect( 16.0f / 9.0f ), m_screenSaverOff( false ), m_connectionLost( 0 ),
       m_statsTick( 0 )
@@ -225,6 +226,7 @@ void FFPlayer::Open( const std::vector<std::string>& urls, const std::vector<std
     m_info.clear();
     m_quit = m_seekRequest = m_flushing = m_decodersParked = 0;
     m_opened = m_ended = m_audioStarted = 0;
+    m_playbackFailure=0;
     m_paused = false;
     m_haveFrame = false;
     m_duration = durationHint;
@@ -251,6 +253,10 @@ void FFPlayer::Open( const std::vector<std::string>& urls, const std::vector<std
 
     m_active = true;
     m_threads[0] = StartThread( DemuxThread, this, DEMUX_CPU );
+    if(!m_threads[0]) {
+        m_error="Falha ao criar thread de abertura do video.";
+        m_active=false;
+    }
 }
 
 void FFPlayer::Stop()
@@ -546,6 +552,7 @@ bool FFPlayer::OpenMedia( std::string& error )
 
         Log::Write( "VMX chroma: %s (%d), luma: %s (%d)", fg_vmx_status() == 0 ? "in use" : "not used",
                     fg_vmx_status(), fg_vmx_qpel_status() == 0 ? "in use" : "not used", fg_vmx_qpel_status() );
+        Log::Write("Xenon-safe weighted prediction: status %d (0 enabled; positive C fallback; -2 pending)",fg_vmx_weight_status());
 
         // Never skip deblocking on reference frames: errors smear until the next keyframe.
         fg_set_fast( m_media, 0 );
@@ -681,6 +688,11 @@ void FFPlayer::DemuxLoop()
     m_threads[1] = StartThread( VideoThread, this, VIDEO_CPU );
     if( m_hasAudio )
         m_threads[2] = StartThread( AudioThread, this, AUDIO_CPU );
+    if(!m_threads[1]||(m_hasAudio&&!m_threads[2])) {
+        InterlockedCompareExchange(&m_playbackFailure,3,0);
+        InterlockedExchange(&m_ended,1);
+        return;
+    }
     std::vector<FgTrack> tracks;
     for( int i = 0; i < fg_track_count( m_media ); ++i )
     {
@@ -733,7 +745,8 @@ void FFPlayer::DemuxLoop()
         int type = fg_read_packet( m_media, &pkt );
         if( type <= 0 )
         {
-            Log::Write( type == 0 ? "End of stream" : "Read error %d - treating as end", type );
+            Log::Write( type == 0 ? "End of stream" : "Read error %d", type );
+            if(type<0)InterlockedCompareExchange(&m_playbackFailure,2,0);
             EnterCriticalSection( &m_lock );
             m_videoQ.eof = m_audioQ.eof = true;
             LeaveCriticalSection( &m_lock );
@@ -774,10 +787,20 @@ void FFPlayer::VideoLoop()
         FgPicture pic;
         int got = fg_decode_video( m_media, pkt, &pic );
         fg_free_packet( pkt );
+        if(got<0) {
+            Log::Write("Video decoder failed while %s",draining?"draining delayed frames":"decoding a packet");
+            InterlockedCompareExchange(&m_playbackFailure,1,0);
+            InterlockedExchange(&m_ended,1);
+            return;
+        }
         if( got <= 0 )
         {
             if( draining )
             {
+                if(!m_decoded) {
+                    InterlockedCompareExchange(&m_playbackFailure,1,0);
+                    InterlockedExchange(&m_ended,1);return;
+                }
                 InterlockedExchange( &m_ended, 1 );
                 while( !m_quit && !m_flushing )
                     Sleep( 10 );
@@ -1059,6 +1082,14 @@ void FFPlayer::Update()
     KeepScreenAwake( m_active && m_opened && !m_paused );
     if( !m_active )
         return;
+
+    if(m_playbackFailure) {
+        m_error=m_playbackFailure==1?"Codec de video: falha na decodificacao. Escolha outro link H.264 ate 720p.":
+            m_playbackFailure==2?"Falha ao ler os dados do video. Tente outro link.":
+            "Falha ao criar threads de reproducao. Tente um video mais leve.";
+        Log::Write("Playback failed: %s",m_error.c_str());
+        Stop();return;
+    }
 
     if( m_ended && !m_opened && !m_error.empty() )
     {

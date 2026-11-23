@@ -8,7 +8,7 @@ foreach($helper in @('bootstrap_dependencies.ps1','build_native_tls.ps1','build_
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $file
     if($LASTEXITCODE -ne 0){throw ('Build failed: '+$helper)}
 }
-Write-Output 'REBUILDING NUVIO Xbox UI6'
+Write-Output 'REBUILDING NUVIO Xbox UI8'
 $buildStarted=Get-Date
 & $msbuild (Join-Path $PSScriptRoot 'NUVIO.vcxproj') /t:Rebuild '/p:Configuration=Release' '/p:Platform=Xbox 360' /v:minimal /nologo
 if($LASTEXITCODE -ne 0){throw 'NUVIO build failed. Do not copy an older XEX.'}
@@ -21,4 +21,4 @@ try {
     if([Text.Encoding]::ASCII.GetString($magic) -ne 'XEX2'){throw 'Invalid XEX header.'}
 } finally {$stream.Dispose()}
 Write-Output ('READY: '+$xex.FullName)
-Write-Output ('Build: Xbox UI6 - 23.11.2026 | '+$xex.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))
+Write-Output ('Build: Xbox UI8 - 23.11.2026 | '+$xex.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))

@@ -1,57 +1,88 @@
-# Validacao da versao leve e do player
+# Validation and its limits
 
-## Executado
+## Current status — November 23, 2026
 
-- Compilacao nativa das bibliotecas FFmpeg, video e guard com VS2010 / XDK instalado.
-- Compilacao do executavel NUVIO para Xbox 360.
-- Testes de autenticacao, navegacao e addons com transporte HTTP isolado.
-- Casos de analogico esquerdo: zona morta, eixos, repeticao inicial de 330 ms e continuacao a cada 110 ms.
-- Selecao de fonte HTTP e cabecalhos de provedor; rejeicao de cabecalhos que injetam linhas, Host/Range conflitantes e entradas sem video direto.
-- Executavel nativo separado com o mesmo FFPlayer e FFmpeg no Xenia Canary 54386cb. Arquivo: trailer publico Sintel, https://media.w3.org/2010/05/sintel/trailer.mp4.
-- Resultado do teste curto: H.264 854x480 a 24 fps, AAC estereo 48 kHz; 52 quadros decodificados, 48 exibidos, zero descartados; sem erro de abertura. Audio com buffer ativo e voz XAudio2 criada.
+**The maintainer reports an error and a video that does not load. End-to-end
+playback is unresolved.** [Issue #4](https://github.com/heltindev/NuvioXbox360/issues/4)
+tracks the report. The exact latest error/platform/source is not available.
 
-O teste nao usa login, nao modifica a conta e nao acessa fontes particulares.
+## UI8 checks
 
-## Limites explicitos
+- Navigation/controller-keyboard tests passed, including editing during catalog
+  and artwork loading, query submission, back navigation and Account access.
+- Authentication tests use the actual backend with an isolated mock transport:
+  logout clears credentials/profile state, a fresh device session can start
+  without reboot, and the generated QR retains a four-module quiet zone.
+- XboxMain.cpp and NuvioGraphics.cpp passed XDK syntax checking.
+- The newer local XEX is newer than the UI8 source changes, and its linked
+  executable contains the UI8 marker. Integrity is recorded in release-ui8.json.
+- Physical-device visuals, QR camera scanning and real account switching remain pending.
 
-O teste anterior no Xenia valida arquivo local e renderizacao/audio. O teste novo de torrent valida o cliente no Windows com um tracker/peer controlado. A tentativa de executar o novo XEX de teste nesta sessao ficou na inicializacao do Xenia, antes de iniciar o titulo; portanto NAO confirma torrent + decoder no Xbox. A reproducao longa em console fisico, HTTP de cada provedor, DHT publico e um TorrServer real continuam dependendo de testes em seu ambiente. Nao foi medido o pico total de RAM de todas as telas do launcher no console; os limites sao aplicados por cache, imagem e fila.
+## Earlier isolated tests
 
-## Memoria
+- FFmpeg/video/guard and the native application built with VS2010/XDK.
+- Analog input: deadzone, dominant axis, 330 ms initial repeat and 110 ms repeats.
+- Add-on authentication/profile ownership, source headers and library routes.
+- HTTP transport byte comparison, redirects, chunks, ranges and malformed/truncated
+  responses on a Windows socket/XNet shim. TLS is stubbed in that host test.
+- An earlier separate native FFPlayer/FFmpeg executable ran in Xenia Canary 54386cb
+  with the public Sintel trailer (https://media.w3.org/2010/05/sintel/trailer.mp4):
+  H.264 854x480/24 fps and AAC stereo/48 kHz; 52 frames decoded, 48 displayed,
+  zero dropped in the short test, with an active XAudio2 voice/buffer.
 
-Capas: no maximo 12 texturas de 160x240, 1.76 MiB de pixels brutos, mais alinhamento do driver. Ha um unico fundo e metadados de um titulo em foco. Imagens maiores que 2 milhoes de pixels sao recusadas antes de descomprimir e novos downloads de imagem param quando a memoria fisica disponivel cai abaixo de 32 MiB.
+The Xenia local-file test is not the complete current launcher/network/player
+path. A later torrent test XEX did not finish emulator startup. Neither result
+establishes successful current HTTP/torrent playback on physical Xbox.
 
-Player: tres quadros YUV, filas com limites de pacotes e de bytes, pacotes individuais limitados a 2 MiB, audio estereo e recusa de video acima de 1280x720. As capas/fundo sao liberados ao entrar no player; sair destroi o player e seus buffers.
+## Controlled torrent tests
 
-## Referencias de codigo
+NuvioTorrent.cpp independently implements BEP 3/5/9/10/15 in C++98.
+Windows checks covered SHA-1 vectors, bounded bencode, hex/base32 magnet hashes,
+loopback UDP tracker/TCP peer, extension negotiation, metadata/piece integrity,
+4,372,373-byte sample comparison, seek, cancellation, multi-file selection and
+corrupted-data rejection. Later cases exercised larger/out-of-order metadata,
+peer refusal and retry. None uses the user's films or external peers.
 
-- HG-ERIK/x360-homebrew-libs: 43a3969ec2a5103218a4d7120cceac7ea494e846.
-- HG-ERIK/simple360player: 5d235c1fd24c098ccc1b2463c1b4265bf2e7844c.
-- NuvioMedia/NuvioTV: protocolo de manifest, stream, proxyHeaders e clientResolve.
+Run `VisualStudio2010/run_torrent_tests.bat`, then
+`python tools/test_torrent_integration.py` for controlled fixture cases.
+The fixtures are test tools, not a required PC server for the native P2P path.
 
-A importacao do FFPlayer recebeu limites menores de memoria, limite de resolucao e contagem de bytes por fila. O HTTP local recebeu limite de tamanho, suporte a redirecionamentos de video, verificacao de HTTP Range e supressao de URLs/configuracoes nos logs.
+Metadata is limited to 1 MiB, peers to 64 and peer messages to 128 KiB. Two
+verified pieces of up to 4 MiB each are cached. No full movie is kept in RAM.
 
-## Cliente torrent integrado - 20/11/2026
+## Memory and decoder work
 
-Implementacao C++98 propria em `NuvioTorrent.cpp`, baseada nos BEPs 3, 5, 9, 10 e 15 de bittorrent.org. O decoder recebe uma fonte com read/seek; nao e tratado como se pudesse decodificar a URI magnet diretamente.
+The UI uses at most twelve poster textures, one backdrop and bounded metadata.
+Current requested posters are 192x288 with bilinear scaling; driver alignment
+and additional allocations mean texture bounds are not a total RAM measurement.
+Oversized images are rejected before decompression, and new image downloads
+stop when available physical memory falls below 32 MiB.
 
-Verificacoes desta sessao:
+The player uses three YUV frames, byte/count-bounded packet queues, packets up
+to 2 MiB, stereo audio and a maximum 1280x720 video size. UI artwork is released
+on player entry; leaving destroys the player and its buffers.
 
-- VS2010 host: SHA-1 (incluindo vetor de 1 milhao de caracteres), bencode com limites, rejeicao de entradas invalidas, URI magnet hexadecimal/base32.
-- Tracker UDP e peer TCP restritos a 127.0.0.1, usando o trailer aberto Sintel: handshake, negociacao `ut_metadata`, metadados verificados pelo infoHash e 4.372.373 bytes comparados com o arquivo original.
-- Busca para frente/tras, limites de arquivo e cancelamento.
-- Peer que envia dados corrompidos: cliente recusa a parte antes de devolver bytes ao decoder.
-- Torrent com arquivo auxiliar antes do video: `so=1`/`fileIdx=1` seleciona o video e respeita fronteiras de partes entre arquivos.
-- Backend de addons: infoHash em clientResolve, trackers e fileIdx preservados; fontes conhecidas como 4K/HEVC rejeitadas com mensagem explicita.
+Xenon weight-kernel host tests and opcode controls passed. Historical metrics
+remain in validation-xenon.json. Current pixel equality, native VMX execution,
+memory peak, sustained frame rate and long-run stability need Xbox measurements.
+See [decoder validation](DECODER-XENON.md).
 
-Reproducao: iniciar `python tools/torrent_fixture.py CAMINHO_DO_TRAILER.mp4`; executar `VisualStudio2010/run_torrent_tests.bat "MAGNET_IMPRESSO" "CAMINHO_DO_TRAILER.mp4"`. Opcoes do fixture: `--multi` e `--corrupt`. Para corrupcao, passar tambem `reject-corrupt` ao teste. Encerrar o fixture depois. Ele serve apenas em loopback e e uma ferramenta de teste, nao uma dependencia do aplicativo.
+## External conversion tests
 
-Cache torrent: duas partes verificadas, maximo 4 MiB cada. Metadados ate 1 MiB, 64 peers, 128 KiB por mensagem de peer. Sem cache de filme completo, processo persistente ou alteracao da conta.
+Synthetic 1080p HEVC and 10-bit PQ/BT.2020 clips converted over loopback HTTP on
+the PC. Output checks found H.264 <=720p/yuv420p/BT.709 SDR and AAC stereo, with
+stream durations within 120 ms. Authentication and ranges passed. The Xbox
+demux worker polls complete-file preparation jobs; no converter runs on Xbox.
 
-Referencias: https://www.bittorrent.org/beps/bep_0003.html, bep_0005.html, bep_0009.html, bep_0010.html e bep_0015.html.
+Real AV1 input, actual TorrServer resolution and long movies remain unverified.
+PC conversion does not demonstrate console playback or real-time transcoding.
 
-## Alpha 2 validation - November 20, 2026
+## Still required
 
-- Production Http.cpp compiled against a Windows socket/XNet shim: complete MP4 byte comparison, redirects, chunked transfer, byte-range seek, invalid range rejection and truncated-response failure passed. TLS is stubbed out in this host-only transport test; it does not validate HTTPS.
-- PC conversion integration passed using synthetic 1080p HEVC and 10-bit PQ/BT.2020 clips served through HTTP. Outputs verified as H.264 1280x720/yuv420p BT.709 SDR and AAC stereo, with stream durations within 120 ms. HTTP authentication and Range checks passed.
-- The native player creates conversion jobs on its demux worker, polls pending prepared files and retains the normal seekable MP4 source path. No conversion subprocess runs on Xbox.
-- Physical Xbox startup, real-time A/V synchronization on hardware, long playback, public torrent swarms and AV1 input remain unverified. Complete-file conversion is implemented; real-time conversion is not.
+Reproduce issue #4; test the current local-file, HTTP and torrent paths through
+the full app; measure real peer behavior, cancellation, pause/seek, exact A/V
+sync, total memory and long playback on physical Xbox 360. Do not interpret
+isolated host results as proof that all codecs, providers or streams work.
+
+Upstream bases: HG-ERIK/x360-homebrew-libs 43a3969ec2a5103218a4d7120cceac7ea494e846
+and HG-ERIK/simple360player 5d235c1fd24c098ccc1b2463c1b4265bf2e7844c.

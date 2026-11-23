@@ -153,6 +153,7 @@ static int BRIDGE_PORT = 0;
 static bool g_catalogLoading = false;
 static HANDLE g_artThread = NULL;
 static WORD g_deferredButtons = 0;
+static bool g_logoutPending = false;
 
 // The card follows the focused controller item; its artwork is fetched once
 // after the selection has rested, keeping D-pad movement responsive.
@@ -265,7 +266,7 @@ static float TextWidth(const char *text, float size) {
 
 static void DrawCentered(NuvioGraphics &g, float cx, float y, float size,
                          const char *text, D3DCOLOR color) {
-    g.Text(cx - TextWidth(text, size) / 2, y, size, text, color);
+    g.Text(cx - g.MeasureText(size,text) / 2, y, size, text, color);
 }
 
 static void InitialOf(const char *name, char out[2]) {
@@ -409,6 +410,7 @@ static void BeginQrSignIn(const char *ip, bool networkReady, NuvioState &app) {
     g_account.lastPoll = GetTickCount();
     g_qrSize = 0;
     g_account.error[0] = '\0';
+    g_account.code[0] = g_account.link[0] = '\0';
     if (!networkReady) {
         SetAccountError("Network is not ready on this console. Press A to retry.");
         return;
@@ -424,102 +426,81 @@ static void BeginQrSignIn(const char *ip, bool networkReady, NuvioState &app) {
     if (g_account.state == ACCOUNT_PENDING) FetchQrMatrix(ip);
 }
 
+static void DrawWrapped(NuvioGraphics &g,float x,float y,float size,const char *text,int columns,int lines);
+static void DrawAuthBackground(NuvioGraphics &g) {
+    g.Rect(0,0,SCREEN_WIDTH,SCREEN_HEIGHT,Color(10,10,12));
+    for(int x=0;x<760;x+=4) {
+        const int r=31-x/32,b=61-x/16;
+        g.Rect((float)x,0,4,SCREEN_HEIGHT,Color(r>9?r:9,12,b>15?b:15));
+    }
+    g.Rect(760,0,1,SCREEN_HEIGHT,Color(30,26,36));
+    DrawNuvioLogo(g,72,220,1.65f);
+    g.Text(166,226,55,"nuvio",TEXT_WHITE);
+    g.Text(72,340,43,"Assista tudo, em",TEXT_WHITE,650);
+    g.Text(72,397,43,"qualquer lugar",TEXT_WHITE,650);
+    g.Text(72,492,22,"Entre para sincronizar seus dados",TEXT_MUTED,650);
+    g.Text(72,528,22,"entre dispositivos.",TEXT_MUTED,650);
+}
+
 static void DrawQrLoginScreen(NuvioGraphics &g, const NuvioState &state) {
     (void)state;
-    DrawGradientBackground(g);
+    DrawAuthBackground(g);
+    g.Text(805,44,34,"Bem-vindo de volta",TEXT_WHITE,440);
+    g.Text(805,99,20,"Escaneie para acessar sua biblioteca",TEXT_MUTED,440);
+    g.Text(805,129,20,"e continuar assistindo.",TEXT_MUTED,440);
 
-    // Left panel - Instructions (NuvioTV style)
-    const float leftX = 80;
-    const float leftY = 120;
-    DrawNuvioLogo(g, leftX, leftY, 1.6f);
-    g.Text(leftX + 80, leftY + 5, 55, "nuvio", TEXT_WHITE);
-    g.Text(leftX, leftY + 110, 36, "Sign in to Nuvio", TEXT_WHITE);
-    g.Text(leftX, leftY + 170, 22, "Use your phone to scan the QR code", TEXT_MUTED);
-    g.Text(leftX, leftY + 205, 22, "or visit the link below.", TEXT_MUTED);
-
-    // Link and code
-    g.Text(leftX, leftY + 270, 18, "nuvio.tv/link", TEXT_MUTED);
-    if (g_account.code[0]) {
-        g.Text(leftX, leftY + 310, 48, g_account.code, TEXT_WHITE);
-        g.Text(leftX, leftY + 370, 18, "Enter this code on your phone", TEXT_DIM);
-    }
-
-    // Right panel - QR Code
-    const float rightX = 760;
-    const float rightY = 100;
-    const float panelW = 440;
-    const float panelH = 520;
-    g.RoundedRect(rightX, rightY, panelW, panelH, 20, BG_CARD);
-    DrawCentered(g, rightX + panelW / 2, rightY + 40, 26, "Connect your account", TEXT_WHITE);
-
-    const float box = 320;
-    const float boxX = rightX + (panelW - box) / 2;
-    const float boxY = rightY + 100;
-
-    // White border around QR
-    g.RoundedRect(boxX - 16, boxY - 16, box + 32, box + 32, 12, TEXT_WHITE);
-    g.RoundedRect(boxX - 8, boxY - 8, box + 16, box + 16, 10, BG_CARD);
-
-    if (g_qrSize > 0) {
-        const float cell = box / g_qrSize;
-        for (int r = 0; r < g_qrSize; ++r) {
-            for (int c = 0; c < g_qrSize; ++c) {
-                if (g_qrBits[r * g_qrSize + c])
-                    g.Rect(boxX + c * cell, boxY + r * cell, cell + 0.5f, cell + 0.5f, BG_DARK);
-            }
-        }
+    const int box=288,boxX=876,boxY=194;
+    // The backend includes the four-module quiet zone. Keep it white and use
+    // whole pixels, without overlap between modules, for reliable scanning.
+    g.RoundedRect(boxX-10,boxY-10,box+20,box+20,12,D3DCOLOR_ARGB(255,255,255,255));
+    if(g_qrSize>0) {
+        g.Rect(boxX,boxY,box,box,D3DCOLOR_ARGB(255,255,255,255));
+        const int cell=box/g_qrSize;
+        const int left=boxX+(box-cell*g_qrSize)/2;
+        const int top=boxY+(box-cell*g_qrSize)/2;
+        for(int r=0;r<g_qrSize;++r)for(int c=0;c<g_qrSize;++c)
+            if(g_qrBits[r*g_qrSize+c])g.Rect((float)(left+c*cell),
+                (float)(top+r*cell),(float)cell,(float)cell,D3DCOLOR_ARGB(255,0,0,0));
     } else {
-        g.RoundedRect(boxX, boxY, box, box, 8, BG_CARD);
-        DrawCentered(g, boxX + box / 2, boxY + box / 2 - 10, 20, "Loading QR code...", TEXT_MUTED);
+        g.Rect(boxX,boxY,box,box,BG_CARD);
+        DrawCentered(g,1020,322,19,g_account.state==ACCOUNT_ERROR?
+            "QR Code indisponivel":"Carregando QR Code...",TEXT_MUTED);
     }
-
-    // Status text
-    if (g_account.state == ACCOUNT_PENDING) {
-        DrawCentered(g, rightX + panelW / 2, boxY + box + 60, 20, "Waiting for your approval...", ACCENT_GREEN);
-    } else if (g_account.state == ACCOUNT_ERROR) {
-        DrawCentered(g, rightX + panelW / 2, boxY + box + 50, 18, g_account.error, Color(207, 102, 121));
-        DrawCentered(g, rightX + panelW / 2, boxY + box + 80, 18, "Press A to generate a new QR code", TEXT_WHITE);
+    DrawCentered(g,1020,510,20,"nuvio.tv/link",TEXT_MUTED);
+    if(g_account.code[0])DrawCentered(g,1020,543,32,g_account.code,TEXT_WHITE);
+    if(g_account.state==ACCOUNT_PENDING)
+        DrawCentered(g,1020,600,18,"Aguardando aprovacao no celular...",ACCENT_GREEN);
+    else if(g_account.state==ACCOUNT_ERROR) {
+        DrawWrapped(g,805,594,16,g_account.error,43,2);
     }
-
-    // Bottom hint
-    DrawControllerFooter(g,44,SCREEN_HEIGHT-40,"A: Retry     B: Back");
-    g.Text(1150, SCREEN_HEIGHT - 40, 12, "v0.9", TEXT_DIM);
+    DrawControllerFooter(g,805,679,g_account.state==ACCOUNT_ERROR?
+        "A: Tentar novamente    B: Voltar":"B: Voltar");
 }
 
 // ============ LOGIN SCREEN ============
 static void DrawLoginScreen(NuvioGraphics &g, const NuvioState &state, bool online) {
-    DrawGradientBackground(g);
-    for (int x = 0; x < 670; x += 4) {
-        const int r = 38 - x / 50;
-        const int b = 72 - x / 21;
-        g.Rect((float)x, 0, 4, SCREEN_HEIGHT, Color(r, 16, b > 18 ? b : 18));
-    }
-    g.Rect(670, 0, 610, 720, Color(12, 12, 16));
-    DrawNuvioLogo(g, 90, 195, 1.55f);
-    g.Text(181, 201, 55, "nuvio", TEXT_WHITE);
-    g.Text(90, 328, 39, "Watch anything, anywhere", TEXT_WHITE, 560);
-    g.Text(90, 397, 22, "Movies and series on Xbox 360.", TEXT_MUTED);
-
-    g.Text(735, 107, 46, "Welcome back", TEXT_WHITE);
-    g.Text(735, 182, 22, "Your Nuvio account, directly on Xbox 360.", TEXT_MUTED);
-    const float bw = 455, bh = 72;
-    const float bx = 735;
-    DrawButton(g, bx, 286, bw, bh, "Sign in with QR code", true, true);
-    g.Text(735, 396, 21, "Scan and approve on nuvio.tv", TEXT_MUTED);
+    (void)state;
+    DrawAuthBackground(g);
+    g.Text(805,90,34,"Bem-vindo de volta",TEXT_WHITE,440);
+    g.Text(805,151,20,"Entre para acessar sua biblioteca",TEXT_MUTED,440);
+    g.Text(805,181,20,"e seu progresso.",TEXT_MUTED,440);
+    g.RoundedRect(805,286,420,72,16,TEXT_WHITE);
+    DrawCentered(g,1015,306,26,"Entrar com QR Code",BG_DARK);
+    g.Text(805,396,20,"Escaneie e aprove pelo celular.",TEXT_MUTED,440);
     if (online) {
-        g.Circle(743, 572, 6, ACCENT_GREEN);
-        g.Text(759, 559, 17, "Xbox internet connected", ACCENT_GREEN);
+        g.Circle(813, 572, 6, ACCENT_GREEN);
+        g.Text(829,559,17,"Internet conectada",ACCENT_GREEN);
     } else {
         const char *networkError = NuvioNativeLastError();
         if (networkError && networkError[0]) {
-            g.Text(735, 554, 17, "Network or sign-in connection failed:", ACCENT_GOLD);
-            g.Text(735, 582, 16, networkError, TEXT_MUTED, 465);
+            g.Text(805,554,17,"Falha na conexao de rede ou login:",ACCENT_GOLD);
+            DrawWrapped(g,805,582,16,networkError,43,2);
         } else {
-            g.Text(735, 554, 17, "Press A to connect your Nuvio account", TEXT_MUTED);
+            g.Text(805,554,17,"Pressione A para conectar sua conta",TEXT_MUTED,440);
         }
     }
     g.Text(90, SCREEN_HEIGHT - 36, 13, "NUVIO", TEXT_DIM);
-    DrawControllerFooter(g,735,SCREEN_HEIGHT-40,"A: Connect    B: Back");
+    DrawControllerFooter(g,805,SCREEN_HEIGHT-40,"A: Entrar");
 }
 
 // ============ PROFILE SELECTION ============
@@ -573,7 +554,6 @@ static void DrawTextBox(NuvioGraphics &g, float x, float y, float w, float h,
     g.RoundedRect(x - 2, y - 2, w + 4, h + 4, 12, FOCUS_BLUE);
     g.RoundedRect(x, y, w, h, 10, BG_HOVER);
     const float size = 24;
-    const int maxChars = (int)((w - 50) / (size * 0.52f));
     const int len = (int)std::strlen(text);
     if (len == 0) {
         g.Text(x + 20, y + h / 2 - 15, size, placeholder, TEXT_DIM);
@@ -581,10 +561,10 @@ static void DrawTextBox(NuvioGraphics &g, float x, float y, float w, float h,
         return;
     }
     const char *shown = text;
-    if (len > maxChars) shown = text + (len - maxChars);
+    while(*shown&&g.MeasureText(size,shown)>w-50)++shown;
     g.Text(x + 20, y + h / 2 - 15, size, shown, TEXT_WHITE);
     if ((GetTickCount() / 500) % 2 == 0) {
-        const float cx = x + 20 + (float)std::strlen(shown) * size * 0.52f;
+        const float cx = x + 20 + g.MeasureText(size,shown);
         g.Rect(cx, y + 10, 2, h - 20, TEXT_WHITE);
     }
 }
@@ -863,7 +843,7 @@ static void DrawSearchScreen(NuvioGraphics &g, const NuvioState &state, bool onl
     DrawGradientBackground(g);
     DrawUserBadge(g, state, online);
 
-    g.Text(110, 40, 36, "Search", TEXT_WHITE);
+    g.Text(110, 40, 36, "Busca", TEXT_WHITE);
 
     float boxX = 110;
     float boxY = 110;
@@ -878,15 +858,11 @@ static void DrawSearchScreen(NuvioGraphics &g, const NuvioState &state, bool onl
 
     g.Icon(2, boxX + 16, boxY + 4, 48, state.searchActive ? TEXT_WHITE : TEXT_MUTED);
 
-    if (state.searchQuery[0]) {
-        g.Text(boxX + 72, boxY + 12, 22, state.searchQuery, TEXT_WHITE);
-        if (state.searchActive && (GetTickCount() / 500) % 2 == 0) {
-            int textW = (int)std::strlen(state.searchQuery) * 14;
-            g.Rect(boxX + 72 + textW, boxY + 14, 2, 28, TEXT_WHITE);
-        }
-    } else {
-        g.Text(boxX + 72, boxY + 12, 22, "Search movies, series...", TEXT_DIM);
-    }
+    // Editing uses textBuffer; searchQuery is the last submitted query.
+    // DrawTextBox scrolls long input so the latest typed letters stay visible.
+    if(state.searchActive)DrawTextBox(g,boxX+68,boxY,boxW-68,boxH,
+        state.textBuffer,"Buscar filmes e series...");
+    else g.Text(boxX+72,boxY+12,22,state.searchQuery,TEXT_WHITE,boxW-92);
 
     if (state.searchActive) DrawKeyboard(g, state, 205);
     else if(g_catalogLoading)g.Text(110,220,24,"Pesquisando filmes e series...",TEXT_MUTED);
@@ -917,8 +893,7 @@ static void DrawLibraryScreen(NuvioGraphics &g, const NuvioState &state, bool on
 }
 
 // ============ SETTINGS SCREEN ============
-static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool online) {
-    (void)online;
+static void DrawSettingsCategories(NuvioGraphics &g,const NuvioState &state) {
     g.Rect(0,0,SCREEN_WIDTH,SCREEN_HEIGHT,BG_DARK);
     // The 80px global navigation rail is drawn above this view.
     g.Rect(80,0,218,720,Color(27,27,27));
@@ -926,7 +901,8 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
     g.Rect(80,199,218,1,Color(61,61,61));
 
     const char *categories[]={"Voce","Visual","Midia","Servicos","Sistema"};
-    const int categoryIcons[]={3,4,1,2,4};
+    // Person, palette, play, chain links, cog (same categories as Nuvio).
+    const int categoryIcons[]={5,6,7,8,4};
     for(int c=0;c<5;++c) {
         const float y=221+c*56.0f;
         const bool selected=state.settingsCategory==c;
@@ -936,6 +912,11 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
         g.Icon(categoryIcons[c],110,y+12,19,selected?TEXT_WHITE:TEXT_DIM);
         g.Text(149,y+10,20,categories[c],focused?BG_DARK:selected?TEXT_WHITE:Color(154,158,163),138);
     }
+}
+static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool online) {
+    (void)online;
+    DrawSettingsCategories(g,state);
+    const char *categories[]={"Voce","Visual","Midia","Servicos","Sistema"};
     const int cat=state.settingsCategory>=0&&state.settingsCategory<5?state.settingsCategory:0;
     const char *titles[5][3]={
         {"Conta","Alternar perfil","Sessao em grupo"},
@@ -951,7 +932,7 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
         {"Gerenciar integracoes disponiveis","Provedores para biblioteca e continuar assistindo",NULL},
         {"Inicializacao e comportamento dos perfis","Informacoes do app, atualizacoes e creditos",NULL}
     };
-    const int rowIcons[5][3]={{3,3,3},{4,3,0},{2,1,0},{2,3,0},{4,3,0}};
+    const int rowIcons[5][3]={{5,5,5},{6,3,0},{8,7,0},{8,5,0},{4,3,0}};
     g.Text(328,112,31,categories[cat],TEXT_WHITE);
     const int count=NuvioSettingsItemCount(cat);
     const float panelX=327,panelY=157,panelW=925,rowH=61;
@@ -975,9 +956,28 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
     g.Logo(740,435,26);
     g.Text(772,436,23,"NUVIO",TEXT_WHITE);
     g.Text(665,481,15,"Nuvio para Xbox 360",TEXT_DIM);
-    g.Text(655,506,14,"Xbox UI6 - 23.11.2026 | 4 itens no menu",TEXT_DIM);
+    g.Text(655,506,14,"Xbox UI8 - 23.11.2026 | busca e conta",TEXT_DIM);
     DrawStatusLine(g,645);
-    DrawControllerFooter(g,328,685,"A: Abrir    B: Voltar    Y: Sair da conta");
+    DrawControllerFooter(g,328,685,"A: Abrir    B: Voltar    Y: Conta");
+}
+
+static void DrawAccountScreen(NuvioGraphics &g,const NuvioState &state) {
+    DrawSettingsCategories(g,state);
+    g.Text(328,112,31,"<  Conta",TEXT_WHITE);
+    g.RoundedRect(327,157,925,130,18,Color(27,27,27));
+    g.Text(347,171,23,"Conta",TEXT_WHITE);
+    g.Text(347,216,19,"Status",TEXT_MUTED);
+    g.Text(347,248,19,"E-mail",TEXT_MUTED);
+    const char *status=g_account.state==ACCOUNT_SIGNED_IN?"Conectado":"Desconectado";
+    g.Text(1230-g.MeasureText(19,status),216,19,status,TEXT_WHITE);
+    const char *email=g_account.email[0]?g_account.email:"-";
+    g.Text(1230-g.MeasureText(19,email),248,19,email,TEXT_WHITE,860);
+    g.RoundedRect(327,301,925,56,16,TEXT_WHITE);
+    DrawCentered(g,789,316,21,g_logoutPending?"Saindo da conta...":
+        g_account.state==ACCOUNT_SIGNED_IN?"Sair":"Entrar com QR Code",BG_DARK);
+    if(g_logoutPending)g.Text(347,388,18,"Aguarde a requisicao em andamento terminar.",TEXT_MUTED);
+    DrawStatusLine(g,645);
+    DrawControllerFooter(g,328,685,g_logoutPending?"Aguarde...":"A: Selecionar    B: Voltar");
 }
 
 // ============ STREAMING P2P SETTINGS ============
@@ -1267,6 +1267,7 @@ static void DrawScreen(NuvioGraphics &g, const NuvioState &state,
         case NUVIO_SCREEN_SEARCH_RESULTS: DrawSearchScreen(g, state, online); break;
         case NUVIO_SCREEN_LIBRARY:        DrawLibraryScreen(g, state, online); break;
         case NUVIO_SCREEN_SETTINGS:       DrawSettingsScreen(g, state, online); break;
+        case NUVIO_SCREEN_ACCOUNT:        DrawAccountScreen(g,state); break;
         case NUVIO_SCREEN_P2P_SETTINGS:   DrawP2PSettingsScreen(g, state, online); break;
         case NUVIO_SCREEN_SOURCES:        DrawSourcesScreen(g); break;
         case NUVIO_SCREEN_ADDONS:         DrawAddonsScreen(g, state, online); break;
@@ -1276,7 +1277,8 @@ static void DrawScreen(NuvioGraphics &g, const NuvioState &state,
 
     if(state.screen==NUVIO_SCREEN_HOME||state.screen==NUVIO_SCREEN_DISCOVER||
        state.screen==NUVIO_SCREEN_SEARCH||state.screen==NUVIO_SCREEN_SEARCH_RESULTS||
-       state.screen==NUVIO_SCREEN_LIBRARY||state.screen==NUVIO_SCREEN_SETTINGS)DrawSidebar(g,state);
+       state.screen==NUVIO_SCREEN_LIBRARY||state.screen==NUVIO_SCREEN_SETTINGS||
+       state.screen==NUVIO_SCREEN_ACCOUNT)DrawSidebar(g,state);
     g.End();
 }
 
@@ -1412,7 +1414,7 @@ static DWORD WINAPI CatalogWorker(void *) {
     return 0;
 }
 static void StartPendingCatalog() {
-    if(!g_catalogPending||g_catalogThread||g_artThread)return;
+    if(!g_catalogPending||g_catalogThread||g_artThread||g_logoutPending)return;
     g_requestPage=g_pendingPage;g_requestMode=g_pendingMode;g_refreshCloud=g_pendingRefresh;
     CopyField(g_requestQuery,sizeof(g_requestQuery),g_pendingQuery);
     g_catalogPending=false;
@@ -1564,13 +1566,33 @@ int main() {
 
         FinishArtwork(gui,app);
         if(FinishCatalog(gui,app,online))posterPasses=0;
+        // The backend has shared session state. Drain its current worker before
+        // clearing authentication, and prevent any new artwork/catalog request.
+        if(g_logoutPending&&!g_artThread&&!g_catalogThread) {
+            g_logoutPending=false;
+            if(AccountRequest(bridgeIp,"/account/logout")) {
+                NuvioInitialize(&app);
+                NuvioCatalogClear(&g_catalog);
+                gui.ClearAvatars();gui.ClearPosters();gui.ClearBackdrop();
+                std::memset(&g_addons,0,sizeof(g_addons));
+                std::memset(&g_preview,0,sizeof(g_preview));
+                std::memset(g_artRetryAt,0,sizeof(g_artRetryAt));
+                g_previewIndex=g_previewFocusIndex=-1;
+                g_nextPoster=0;g_sourceCount=g_sourceCursor=0;g_sourceId[0]=0;
+                g_sourceError[0]=0;g_sourceEpisode=-1;g_episodePicker=false;
+                g_catalogPending=g_catalogLoading=false;
+                g_deferredButtons=pressed=0;
+                online=catalogDirty=false;currentCatalogPage=posterPasses=0;
+                g_avatarNext=0;g_status[0]=0;g_qrSize=0;
+                std::memset(&g_account,0,sizeof(g_account));
+                app.screen=NUVIO_SCREEN_QR_LOGIN;
+                DrawScreen(gui,app,g_catalog,online);
+                BeginQrSignIn(bridgeIp,networkReady,app);
+            } else SetStatus(g_account.error[0]?g_account.error:"Nao foi possivel sair. Tente novamente.");
+        }
         StartPendingCatalog();
         if(g_artThread||g_catalogLoading) {
-            WORD localMask=0xF|XINPUT_GAMEPAD_BACK;
-            const bool browse=app.screen==NUVIO_SCREEN_HOME||app.screen==NUVIO_SCREEN_DISCOVER||
-                app.screen==NUVIO_SCREEN_LIBRARY||app.screen==NUVIO_SCREEN_SEARCH_RESULTS;
-            if(!g_catalogLoading&&browse&&!app.sidebarFocused)localMask|=XINPUT_GAMEPAD_A|XINPUT_GAMEPAD_Y;
-            localMask|=XINPUT_GAMEPAD_B;
+            const WORD localMask=NuvioInputDuringLoadMask(app,g_catalogLoading);
             g_deferredButtons|=pressed&~localMask;
             pressed&=localMask;
         } else {pressed|=g_deferredButtons;g_deferredButtons=0;}
@@ -1616,6 +1638,17 @@ int main() {
         }
 
         switch (app.screen) {
+        case NUVIO_SCREEN_ACCOUNT:
+            if(!g_logoutPending) {
+                if(bB)NuvioBack(&app);
+                else if(bA||bStart) {
+                    g_logoutPending=true;
+                    g_catalogPending=false;
+                    g_catalogLoading=g_catalogThread!=NULL;
+                    g_deferredButtons=0;
+                }
+            }
+            break;
         case NUVIO_SCREEN_PLAYER:
             if(pressed)g_playerInputAt=GetTickCount();
 
@@ -1864,16 +1897,8 @@ int main() {
 
         default: {
             if (app.screen == NUVIO_SCREEN_SETTINGS && bY) {
-                if (AccountRequest(bridgeIp, "/account/logout")) {
-                    NuvioInitialize(&app);
-                    NuvioCatalogClear(&g_catalog);
-                    gui.ClearAvatars(); gui.ClearPosters(); gui.ClearBackdrop();
-                    online = false;
-                    std::memset(&g_addons, 0, sizeof(g_addons));
-                    g_status[0] = 0;
-                    app.screen = NUVIO_SCREEN_LOGIN;
-                    g_qrSize = 0;
-                }
+                app.settingsCategory=0;app.settingsCategoriesFocused=false;
+                app.sidebarFocused=false;app.screen=NUVIO_SCREEN_ACCOUNT;
                 break;
             }
             const int rowCount = app.screen == NUVIO_SCREEN_SETTINGS ? NuvioSettingsItemCount(app.settingsCategory) :
@@ -1944,6 +1969,8 @@ int main() {
 
         // ---- Screen transitions ----
         if (app.screen != lastScreen) {
+            // Never replay a button from a previous screen at a new keyboard key.
+            g_deferredButtons=0;
             if (!(lastScreen == NUVIO_SCREEN_ADD_ADDON && app.screen == NUVIO_SCREEN_ADDONS))
                 g_status[0] = '\0';
 
@@ -1981,7 +2008,7 @@ int main() {
             lastScreen = app.screen;
         }
 
-        if(networkReady)ScheduleArtwork(gui,app,g_catalog);
+        if(networkReady&&!g_logoutPending)ScheduleArtwork(gui,app,g_catalog);
         DrawScreen(gui, app, g_catalog, online);
 
         DWORD frameTime = GetTickCount() - lastFrameTime;

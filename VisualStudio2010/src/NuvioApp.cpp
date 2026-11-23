@@ -20,7 +20,7 @@ int NuvioSettingsItemCount(int category)
 bool NuvioSettingsItemEnabled(int category,int row)
 {
     // Only implemented settings can be opened. Other entries are displayed dimmed.
-    return (category==0&&row==1)||(category==2&&(row==0||row==1));
+    return (category==0&&(row==0||row==1))||(category==2&&(row==0||row==1));
 }
 
 static void CopyText(char *target, int length, const char *source)
@@ -63,7 +63,8 @@ static bool IsStandaloneScreen(NuvioScreen screen)
 {
     return screen == NUVIO_SCREEN_PROFILE || screen == NUVIO_SCREEN_LOGIN ||
            screen == NUVIO_SCREEN_CREATE_PROFILE || screen == NUVIO_SCREEN_ADD_ADDON ||
-           screen == NUVIO_SCREEN_DETAILS || screen == NUVIO_SCREEN_QR_LOGIN;
+           screen == NUVIO_SCREEN_DETAILS || screen == NUVIO_SCREEN_QR_LOGIN ||
+           screen == NUVIO_SCREEN_ACCOUNT;
 }
 
 void NuvioOpenScreen(NuvioState *state, NuvioScreen screen)
@@ -163,7 +164,9 @@ void NuvioSelect(NuvioState *state, int catalogIndex)
             return;
         }
         if(!NuvioSettingsItemEnabled(state->settingsCategory,state->selectedRow))return;
-        if(state->settingsCategory==0&&state->selectedRow==1) {
+        if(state->settingsCategory==0&&state->selectedRow==0) {
+            state->screen=NUVIO_SCREEN_ACCOUNT;
+        } else if(state->settingsCategory==0&&state->selectedRow==1) {
             state->previousScreen=NUVIO_SCREEN_SETTINGS;
             state->screen=NUVIO_SCREEN_PROFILE;
             state->profileCursor=state->profileIndex;
@@ -197,6 +200,17 @@ void NuvioBack(NuvioState *state)
         case NUVIO_SCREEN_SEARCH_RESULTS:
             state->screen = NUVIO_SCREEN_SEARCH;
             state->searchActive = true;
+            break;
+        case NUVIO_SCREEN_SEARCH:
+            NuvioOpenScreen(state,NUVIO_SCREEN_HOME);
+            break;
+        case NUVIO_SCREEN_ACCOUNT:
+            state->screen=NUVIO_SCREEN_SETTINGS;
+            state->settingsCategory=0;
+            state->settingsCategoriesFocused=false;
+            state->selectedRow=0;
+            state->sidebarItem=3;
+            state->sidebarFocused=false;
             break;
         case NUVIO_SCREEN_P2P_SETTINGS:
             state->screen = NUVIO_SCREEN_SETTINGS;
@@ -263,6 +277,7 @@ const char *NuvioScreenName(NuvioScreen screen)
         case NUVIO_SCREEN_SEARCH_RESULTS: return "Search Results";
         case NUVIO_SCREEN_LIBRARY: return "My Library";
         case NUVIO_SCREEN_SETTINGS: return "Settings";
+        case NUVIO_SCREEN_ACCOUNT: return "Conta";
         case NUVIO_SCREEN_P2P_SETTINGS: return "Streaming P2P";
         case NUVIO_SCREEN_DETAILS: return "Details";
         case NUVIO_SCREEN_SOURCES: return "Addon sources";

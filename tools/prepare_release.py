@@ -9,15 +9,17 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = 'v0.1.0-alpha.2'
-EXCLUDED = {'.git', '.vs', 'bin', 'obj', 'build', 'Debug', 'Release', '__pycache__', 'dist'}
+EXCLUDED = {'.git', '.vs', 'bin', 'obj', 'build', 'Debug', 'Release', '__pycache__', 'dist', 'ffmpeg360-h264-xenon-main'}
 BINARY_BUILD = {'.obj', '.lib', '.exe', '.dll', '.pdb', '.idb', '.ilk', '.xdb', '.tlog', '.pyc', '.log', '.xex'}
+PRIVATE_FILES = {'nuvio.cfg', 'nuvio_session.dat', 'nuvio_session.dat.tmp',
+                 'nuvio_home.cache', 'nuvio_search.cache', 'nuvio_last_torrent.meta'}
 
 def source_files():
     for file in ROOT.rglob('*'):
         relative = file.relative_to(ROOT)
         if not file.is_file() or any(part in EXCLUDED for part in relative.parts):
             continue
-        if file.suffix.lower() in BINARY_BUILD or file.name in ('nuvio.cfg', 'nuvio_session.dat', 'nuvio_session.dat.tmp'):
+        if file.suffix.lower() in BINARY_BUILD or file.name.lower() in PRIVATE_FILES or file.suffix.lower() in ('.cache', '.dat', '.meta'):
             continue
         if file.suffix == '.local' or file.suffix in ('.user','.suo','.sdf','.opensdf'):
             continue
@@ -28,9 +30,22 @@ def publish(file):
     if '/ThirdParty/x360-homebrew-libs/' not in relative:
         return True
     vendor = relative.split('/ThirdParty/x360-homebrew-libs/')[1]
+    if vendor.startswith('example/'):
+        return False
+    xenon_patches = {
+        'external/ffmpeg360/libavcodec/h264dsp.c',
+        'external/ffmpeg360/libavcodec/dsputil.c',
+        'external/ffmpeg360/libavcodec/xbox360/h264_chroma_xb.c',
+        'external/ffmpeg360/libavcodec/xbox360/h264_qpel_xb.c',
+        'external/ffmpeg360/libavcodec/xbox360/h264_weight_xb.c',
+        'external/ffmpeg360/libavcodec/xbox360/xenon_vmx_safe.h',
+        'external/ffmpeg360/NOTICE-XENON.md',
+        'external/ffmpeg360/COPYING.LGPLv2.1',
+        'external/ffmpeg360/COPYING.LGPLv3',
+    }
     return (vendor.split('/')[0] in ('https','video','guard','log') or
             '/' not in vendor or file.suffix in ('.vcxproj','.props') or
-            vendor in ('external/mbedtls/LICENSE','external/ffmpeg360/COPYING.GPLv2',
+            vendor in xenon_patches or vendor in ('external/mbedtls/LICENSE','external/ffmpeg360/COPYING.GPLv2',
                        'external/ffmpeg360/COPYING.GPLv3','external/ffmpeg360/LICENSE'))
 
 def main():
@@ -47,7 +62,8 @@ def main():
     assert xex.read_bytes()[:4]==b'XEX2'
     with zipfile.ZipFile(dist/f'NUVIO-{VERSION}-Xbox360.zip','w',zipfile.ZIP_DEFLATED) as archive:
         archive.write(xex,'NUVIO.xex')
-        for name in ['nuvio.example.cfg','docs/RELEASE_NOTES.md','NOTICE.md','LICENSE',
+        for name in ['nuvio.example.cfg','INSTALL-ON-XBOX.txt','docs/RELEASE_NOTES.md',
+                     'docs/KNOWN_ISSUES.md','ROADMAP.md','NOTICE.md','LICENSE',
                      'VisualStudio2010/ThirdParty/simple360player/COPYING']:
             archive.write(ROOT/name,name)
     entries=[]

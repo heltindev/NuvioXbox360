@@ -1,0 +1,103 @@
+{
+  "version": "Xbox UI7 - 23.11.2026",
+  "hardware_executed": false,
+  "host_tests": {
+    "weight_blocks": 6000,
+    "mutation_control": "passed",
+    "forbidden_intrinsic_compile": "passed",
+    "opcode_auditor_controls": "passed"
+  },
+  "native_builds": [
+    {
+      "file": "VisualStudio2010/Release/NUVIO.xex",
+      "bytes": 10530816,
+      "sha256": "bd7d83ce8ebb6c57b05180d4e84e6d7514a77c6c9fde85a9f75fc477739fc250"
+    },
+    {
+      "file": "VisualStudio2010/Release/DecoderVerify/NUVIO-DECODER-VERIFY.xex",
+      "bytes": 4300800,
+      "sha256": "f6650165e77e5ce3ad60e12cb051935f49957ccb4bad9c16a4c28b7ae598b77a"
+    }
+  ],
+  "opcode_audits": [
+    {
+      "file": "libavcodec.lib",
+      "objects": 405,
+      "words": 582445,
+      "vmx_words": 596,
+      "hits": []
+    },
+    {
+      "file": "libavutil.lib",
+      "objects": 31,
+      "words": 12977,
+      "vmx_words": 0,
+      "hits": []
+    },
+    {
+      "file": "NUVIO.exe",
+      "objects": 1,
+      "words": 2003584,
+      "vmx_words": 2785,
+      "hits": []
+    },
+    {
+      "file": "NUVIO-DECODER-VERIFY.exe",
+      "objects": 1,
+      "words": 748544,
+      "vmx_words": 1281,
+      "hits": []
+    }
+  ],
+  "fixtures": {
+    "reference_decoder": {
+      "libavutil": [
+        60,
+        26,
+        102
+      ],
+      "libavcodec": [
+        62,
+        28,
+        102
+      ],
+      "libavformat": [
+        62,
+        12,
+        102
+      ],
+      "libavdevice": [
+        62,
+        3,
+        102
+      ],
+      "libavfilter": [
+        11,
+        14,
+        102
+      ],
+      "libswscale": [
+        9,
+        5,
+        102
+      ],
+      "libswresample": [
+        6,
+        3,
+        102
+      ]
+    },
+    "streams": [
+      {
+        "file": "main-cabac-bf0.h264",
+        "frames": 300,
+        "sha256": "14d7b5e70b035527f7d568c6a2322d3571d77338808438c458759cefae6cfb18"
+      },
+      {
+        "file": "main-cabac-bf3.h264",
+        "frames": 300,
+        "sha256": "f60774766ead284f1613aec317fe0c353638bf20931956dcbef7de28bb691a8f"
+      }
+    ]
+  }
+}

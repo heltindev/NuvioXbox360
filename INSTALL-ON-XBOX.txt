@@ -1,3 +1,6 @@
+KNOWN FAILURE: video still does not load in the maintainer's test.
+Track issue #4; this is an experimental UI8 build, not a stable player.
+
 NUVIO - XBOX 360 RGH/JTAG TEST GUIDE
 
 STATUS: EXPERIMENTAL. The native XEX compiles with Visual Studio 2010
@@ -39,7 +42,7 @@ Use a compatible network connection and never enter Nuvio passwords on
 the Xbox. After the first QR approval, the renewable session is saved locally
 as nuvio_session.dat beside the XEX. Keep this folder writable. On the next
 launch the app refreshes the saved login instead of asking for a new QR.
-Y in Settings signs out and deletes the saved session. Do not share this cache.
+Settings > You > Account > Sign out clears the saved session and opens a fresh QR. Y in Settings opens Account. Do not share this cache.
 
 Please do not publish this as a completed streaming app. Media playback
 needs provider/hardware validation. Native magnet playback is experimental and requires compatible peers and 720p H.264 sources.

@@ -1,52 +1,64 @@
-# 🛠️ Building NUVIO on Windows
+# Building NUVIO on Windows
 
-This repository now uses a **Visual Studio 2010 Xbox 360 project**. It no longer requires a separate Linux cross-compiler or a cloud build service.
+## Requirements
 
-## 1. Install Visual Studio 2010
+Visual Studio 2010 with Visual C++ and a separately installed, appropriately
+licensed Xbox 360 XDK. Ordinary Win32/x64 compilers do not replace the Xbox build
+platform. Do not redistribute Microsoft headers, libraries, tools or installers.
 
-When selecting installation features, keep **Visual C++** enabled. The x64 compiler tools are optional for this project; Itanium, Visual Basic, C#, F#, web, Office, database and SharePoint components are not required.
+## Release build
 
-## 2. Install a compatible Xbox 360 XDK
+Extract the repository preserving its directory layout, then run
+`VisualStudio2010/BUILD-RELEASE.cmd`. It calls the dependency bootstrap, native
+TLS build, decoder build and Release Xbox 360 application rebuild. Network
+access is needed only when pinned dependencies are missing.
 
-The Xbox 360 build platform is supplied by a **separately installed and appropriately licensed** Xbox 360 XDK, not by ordinary Visual Studio 2010. Do not put Microsoft SDK headers, libraries, executables, or installers in this repository.
+Alternatively, from VisualStudio2010:
 
-With the XDK integration installed, Visual Studio should offer an **Xbox 360** platform for C++ projects. Depending on the XDK version and Windows version, legacy setup may require repair or compatibility work. We have **not** verified the particular XDK version shown in the maintainer's screenshot.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\prepare_release.ps1
+```
 
-## 3. Open the project
+Wait for READY. The main output is Release/NUVIO.xex, mirrored from bin/Release.
+Open NUVIO.sln in VS2010 and select Release | Xbox 360 for manual builds after
+building dependencies. If the platform is missing, repair the XDK integration;
+selecting Win32/x64 will not produce an Xbox executable.
 
-1. Download the repository ZIP from GitHub and extract it.
-2. Open `VisualStudio2010/NUVIO.sln` in Visual Studio 2010.
-3. Select **Debug | Xbox 360**.
-4. Select **Build → Build Solution**.
-5. Check the build output. If successful, find `VisualStudio2010/bin/Debug/NUVIO.xex`.
+C1083 mbedtls/ssl.h and LNK1181 video.lib indicate missing dependencies or library
+builds. C4244 numeric-conversion and missing third-party PDB warnings are nonfatal
+only if the overall build succeeds. Save the first fatal error when reporting.
 
-If the project reports that the **Xbox 360 platform is missing**, stop and troubleshoot the XDK installation. Selecting Win32/x64 instead does not fix it.
+## Tests
 
-If the Xbox build reports compiler, API, or linker errors, save the **exact first error message** and the XDK version. The starter intentionally does not claim support for all XDK releases. The real `.XEX` has not yet been built or console-tested here.
+Windows batch helpers in VisualStudio2010 include run_core_tests.bat,
+run_auth_tests.bat, run_cloud_tests.bat, run_torrent_tests.bat and run_vmx_tests.bat.
+They exercise isolated code/fixtures and do not validate real media playback.
 
-## 4. Local test without the XDK
+Portable core example:
 
-Only the NUVIO menu-state engine is platform-independent. With G++ or Clang installed, run from the repository root:
-
-```bash
-g++ -std=c++98 -Wall -Wextra -Werror \
-  VisualStudio2010/tests/NuvioCoreTests.cpp \
-  VisualStudio2010/src/NuvioApp.cpp -o nuvio_core_tests
+```sh
+g++ -std=c++98 -Wall -Wextra VisualStudio2010/tests/NuvioCoreTests.cpp VisualStudio2010/src/NuvioApp.cpp VisualStudio2010/src/NuvioCatalog.cpp -o nuvio_core_tests
 ./nuvio_core_tests
 ```
 
-This test confirms screen-state transitions. It does **not** compile the Xbox executable or test graphics.
+The decoder build and application post-build step run tools/audit_xenon_vmx.py.
+See DECODER-XENON.md for host tests and the separate native pixel verifier.
 
-## 5. Test with Aurora and publish manually
+## Architecture
 
-After a successful `.XEX` build, copy it to a FAT32 USB drive and follow [INSTALL-ON-XBOX.txt](../INSTALL-ON-XBOX.txt). Once hardware testing is successful, a maintainer can manually create a [GitHub Release](https://github.com/heltindev/NuvioXbox360/releases) and attach a ZIP with the `.xex` and installation guide.
+- NuvioApp: portable C++98 state and navigation.
+- XboxMain/NuvioGraphics: Xbox input, UI, rendering and serialized request jobs.
+- NuvioNativeBackend: device authentication, profiles, add-ons, catalogs and sources.
+- NuvioTorrent: bounded native v1 TCP byte source with SHA-1 verification.
+- FFPlayer/ffglue: FFmpeg, GPU YUV output, XAudio2 and source read/seek.
+- tools/transcode_server.py: optional external authenticated conversion worker.
 
-See [RELEASE_NOTES.md](RELEASE_NOTES.md) for an honest preview warning. No downloadable release should be presented as a working media player at this stage.
+## Publishing and status
 
-## Architecture and licensing
+Package only the XEX, documentation, corresponding source and license notices.
+Exclude account sessions, private configuration, personal caches and XDK files.
+Verify artifact hashes and identify the exact source commit in release metadata.
 
-- `VisualStudio2010/src/NuvioApp.*`: SDK-independent C++98 application state.
-- `VisualStudio2010/src/XboxMain.cpp`: Xbox 360-specific controller and graphics smoke test using XDK headers.
-- `VisualStudio2010/NUVIO.vcxproj`: legacy `Xbox 360` build platform, Debug and Release.
-- The original [Nuvio Mobile](https://github.com/NuvioMedia/NuvioMobile) is GPL-3.0 software and a feature reference. No upstream implementation has been copied into this independent starter.
-- Microsoft XDK is proprietary. Use it only under applicable licenses and do not redistribute its files.
+Keep this release experimental: the maintainer still reports video-loading
+failure. Current hardware playback, performance, subtitles and provider behavior
+remain pending. See KNOWN_ISSUES.md, VALIDATION.md and RELEASE_NOTES.md.

@@ -114,6 +114,10 @@ void     fg_set_fast( FgMedia* m, int level );
 int      fg_vmx_status( void );
 /* VMX luma quarter-pel MC, same codes. */
 int      fg_vmx_qpel_status( void );
+/* Xenon-safe weighted prediction: -2 untested, 0 enabled, >0 C fallback. */
+int      fg_vmx_weight_status( void );
+/* Diagnostic switch for subsequently opened media only; default 1. No active decoders. */
+void     fg_set_vmx_enabled( int enabled );
 
 void     fg_profile( double* cabacMs, double* reconMs, double* filterMs, double* waitMs, int reset );
 
