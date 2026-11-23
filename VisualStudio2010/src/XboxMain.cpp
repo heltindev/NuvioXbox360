@@ -977,7 +977,7 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
     g.Logo(740,435,26);
     g.Text(772,436,23,"NUVIO",TEXT_WHITE);
     g.Text(665,481,15,"Nuvio para Xbox 360",TEXT_DIM);
-    g.Text(685,506,14,"Versao experimental",TEXT_DIM);
+    g.Text(685,506,14,"Versao experimental | Xbox UI4 - 23.11.2026",TEXT_DIM);
     DrawStatusLine(g,645);
     DrawControllerFooter(g,328,685,"A: Abrir    B: Voltar    Y: Sair da conta");
 }
