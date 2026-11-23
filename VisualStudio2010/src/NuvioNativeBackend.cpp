@@ -6,6 +6,7 @@
 #include "NuvioNativeBackend.h"
 #include "NuvioNetwork.h"
 #include "NuvioPlayback.h"
+#include "StreamCompat.h"
 #include "Http.h"
 #if defined(_MSC_VER) && _MSC_VER < 1900
 // picojson's current header uses C++11 noexcept; XDK/VS2010 speaks C++03.
@@ -587,12 +588,13 @@ static bool Provides(const picojson::value &manifest, const char *resource, cons
 }
 
 // Known incompatible sources should fail before metadata download/decoder allocation.
+static StreamCompat StreamSupportHint(const picojson::value &stream) {
+    return ClassifyStream(AsString(Field(stream,"name"))+" "+
+                          AsString(Field(stream,"title"))+" "+
+                          AsString(Field(stream,"description")));
+}
 static bool UnsupportedVideo(const picojson::value &stream) {
-    std::string hint=AsString(Field(stream,"name"))+" "+AsString(Field(stream,"title"))+" "+AsString(Field(stream,"description"));
-    for(size_t i=0;i<hint.size();++i)if(hint[i]>='A'&&hint[i]<='Z')hint[i]+='a'-'A';
-    const char *tokens[]={"2160","1080","4k","8k","hevc","h.265","h265","x265","av1","dolby vision","hdr"};
-    for(size_t i=0;i<sizeof(tokens)/sizeof(tokens[0]);++i)if(hint.find(tokens[i])!=std::string::npos)return true;
-    return false;
+    return StreamSupportHint(stream).support==STREAM_UNSUPPORTED;
 }
 
 // A language tag is optional in a stream addon; never guess a country if absent.
@@ -677,8 +679,14 @@ static std::string Sources(const std::string &id, int episode) {
             const std::string url = AsString(Field(stream, "url"));
             if (!torrent && url.empty() && AsString(Field(stream, "externalUrl")).empty()) continue;
             // Source URLs and provider keys remain off the television and logs.
-            out += "[" + SourceLanguageCountry(stream) + "] " + SafeText(label, 50) + " | " + SafeText(desc, 78) +
-                (UnsupportedVideo(stream)?" [Requer conversao para 720p H.264]":torrent ? " [Torrent]" : " [Video]") + "\n";
+            const StreamCompat compat=StreamSupportHint(stream);
+            // Leading '! ' is an internal flag for titles shortened for the TV.
+            out += "[" + SourceLanguageCountry(stream) + "] " +
+                (compat.support==STREAM_UNSUPPORTED?"! ":"") +
+                SafeText(label, 48) + " | " + SafeText(desc, 70) +
+                (compat.support==STREAM_UNSUPPORTED?
+                    std::string(" [Conversao: ")+compat.reason+"]":
+                    torrent ? " [Torrent]" : " [Video]") + "\n";
             ++count;
             s_sources.push_back(stream);
         }
