@@ -4,6 +4,7 @@
 #include "stb_image.h"
 
 #include <d3dx9.h>
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
