@@ -204,27 +204,46 @@ void NuvioGraphics::Rect(float x, float y, float w, float h, D3DCOLOR color)
     Quad(x, y, w, h, 0, 0, 1, 1, m_white, color);
 }
 
+// Draw 1-pixel scan lines with subpixel edge coverage instead of 2-pixel steps.
+// This works with the existing alpha-blended D3D9 quad renderer and saves a shader.
 void NuvioGraphics::RoundedRect(float x, float y, float w, float h, float radius,
                                 D3DCOLOR color)
 {
-    if (radius <= 0) { Rect(x, y, w, h, color); return; }
-    if (radius * 2 > w) radius = w / 2;
-    if (radius * 2 > h) radius = h / 2;
-    Rect(x, y + radius, w, h - 2 * radius, color);
-    for (int row = 0; row < int(radius); row += 2) {
-        const float yDist = radius - float(row) - 1.0f;
-        const float reach = float(std::sqrt(radius * radius - yDist * yDist));
-        const float inset = radius - reach;
-        Rect(x + inset, y + row, w - 2 * inset, 2, color);
-        Rect(x + inset, y + h - row - 2, w - 2 * inset, 2, color);
+    if(radius<=0){Rect(x,y,w,h,color);return;}
+    if(radius*2>w)radius=w/2;
+    if(radius*2>h)radius=h/2;
+    Rect(x,y+radius,w,h-2*radius,color);
+    const int rows=(int)std::ceil(radius),a=(int)(color>>24)&255;
+    for(int row=0;row<rows;++row) {
+        const float yDist=(std::max)(0.0f,radius-row-0.5f);
+        const float inset=radius-(float)std::sqrt((std::max)(0.0f,radius*radius-yDist*yDist));
+        const int solid=(int)std::ceil(inset);
+        Rect(x+solid,y+row,w-2*solid,1,color);
+        Rect(x+solid,y+h-row-1,w-2*solid,1,color);
+        const int edgeAlpha=(int)(a*(solid-inset)+0.5f);
+        if(solid>0&&edgeAlpha>0) {
+            const D3DCOLOR edge=(color&0x00FFFFFF)|((D3DCOLOR)edgeAlpha<<24);
+            Rect(x+solid-1,y+row,1,1,edge);Rect(x+w-solid,y+row,1,1,edge);
+            Rect(x+solid-1,y+h-row-1,1,1,edge);Rect(x+w-solid,y+h-row-1,1,1,edge);
+        }
     }
 }
-
-void NuvioGraphics::Circle(float x, float y, float radius, D3DCOLOR color)
+void NuvioGraphics::Circle(float x,float y,float radius,D3DCOLOR color)
 {
-    for (int row = -int(radius); row < int(radius); row += 2) {
-        const float reach = float(std::sqrt(radius * radius - float(row * row)));
-        Rect(x - reach, y + row, reach * 2, 2, color);
+    if(radius<=0)return;
+    const int rows=(int)std::ceil(radius),a=(int)(color>>24)&255;
+    for(int row=0;row<rows;++row) {
+        const float dist=row+0.5f;
+        const float reach=(float)std::sqrt((std::max)(0.0f,radius*radius-dist*dist));
+        const int solid=(int)std::floor(reach);
+        Rect(x-solid,y+row,solid*2,1,color);
+        Rect(x-solid,y-row-1,solid*2,1,color);
+        const int alpha=(int)(a*(reach-solid)+0.5f);
+        if(alpha>0) {
+            const D3DCOLOR edge=(color&0x00FFFFFF)|((D3DCOLOR)alpha<<24);
+            Rect(x-solid-1,y+row,1,1,edge);Rect(x+solid,y+row,1,1,edge);
+            Rect(x-solid-1,y-row-1,1,1,edge);Rect(x+solid,y-row-1,1,1,edge);
+        }
     }
 }
 
@@ -300,6 +319,30 @@ void NuvioGraphics::Poster(int index, float x, float y, float w, float h)
         if (m_posterIds[i]!=index || !m_posters[i]) continue;
         m_posterAge[i]=++m_cacheClock;
         Quad(x,y,w,h,0,0,1,1,m_posters[i],0xFFFFFFFF); return;
+    }
+}
+
+void NuvioGraphics::PosterRounded(int index,float x,float y,float w,float h,float radius,D3DCOLOR matte)
+{
+    Poster(index,x,y,w,h);
+    if(radius<=0)return;
+    if(radius*2>w)radius=w/2;
+    if(radius*2>h)radius=h/2;
+    const int rows=(int)std::ceil(radius),a=(int)(matte>>24)&255;
+    for(int row=0;row<rows;++row) {
+        const float dist=(std::max)(0.0f,radius-row-0.5f);
+        const float inset=radius-(float)std::sqrt((std::max)(0.0f,radius*radius-dist*dist));
+        const int covered=(int)std::floor(inset);
+        if(covered>0) {
+            Rect(x,y+row,covered,1,matte);Rect(x+w-covered,y+row,covered,1,matte);
+            Rect(x,y+h-row-1,covered,1,matte);Rect(x+w-covered,y+h-row-1,covered,1,matte);
+        }
+        const int alpha=(int)(a*(inset-covered)+0.5f);
+        if(alpha>0) {
+            const D3DCOLOR edge=(matte&0x00FFFFFF)|((D3DCOLOR)alpha<<24);
+            Rect(x+covered,y+row,1,1,edge);Rect(x+w-covered-1,y+row,1,1,edge);
+            Rect(x+covered,y+h-row-1,1,1,edge);Rect(x+w-covered-1,y+h-row-1,1,1,edge);
+        }
     }
 }
 
