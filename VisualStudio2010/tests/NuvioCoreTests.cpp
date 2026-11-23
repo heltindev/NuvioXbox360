@@ -112,6 +112,22 @@ int main(int argc, char **argv)
     NuvioBack(&state);
     assert(state.screen == NUVIO_SCREEN_DISCOVER);
     NuvioBack(&state);
+    assert(state.screen == NUVIO_SCREEN_HOME);
+    NuvioBack(&state);                              // B on Home must not open profiles
+    assert(state.screen == NUVIO_SCREEN_HOME);
+
+    // Only explicitly focusing and selecting the sidebar avatar opens profiles.
+    NuvioMoveHorizontal(&state, -1);
+    NuvioMoveVertical(&state, -1, 0);
+    assert(state.sidebarFocused && state.sidebarItem == -1);
+    NuvioSelect(&state, -1);
+    assert(state.screen == NUVIO_SCREEN_PROFILE);
+    NuvioBack(&state);                              // Cancel selection returns to Home
+    assert(state.screen == NUVIO_SCREEN_HOME);
+
+    NuvioMoveHorizontal(&state, -1);
+    NuvioMoveVertical(&state, -1, 0);
+    NuvioSelect(&state, -1);
     assert(state.screen == NUVIO_SCREEN_PROFILE);
 
     // ---- PIN-protected profiles remain locked until PIN verification exists ----
@@ -131,6 +147,26 @@ int main(int argc, char **argv)
     assert(state.selectedRow == 1);
     NuvioBack(&state);
     assert(state.screen == NUVIO_SCREEN_SETTINGS);
+    NuvioBack(&state);
+    assert(state.screen == NUVIO_SCREEN_HOME);
+
+    // Search accepts the on-screen keyboard input and keeps the text on return.
+    NuvioOpenScreen(&state, NUVIO_SCREEN_SEARCH);
+    NuvioKeyboardBegin(&state, NUVIO_KEYBOARD_SEARCH, state.searchQuery);
+    TypeText(&state, "sintel");
+    assert(std::strcmp(state.textBuffer, "sintel") == 0);
+    std::strncpy(state.searchQuery, state.textBuffer, sizeof(state.searchQuery) - 1);
+    state.searchQuery[sizeof(state.searchQuery) - 1] = '\0';
+    NuvioSearchSubmit(&state);
+    assert(state.screen == NUVIO_SCREEN_SEARCH_RESULTS);
+    NuvioBack(&state);
+    assert(state.screen == NUVIO_SCREEN_SEARCH);
+    NuvioBack(&state);
+    assert(state.screen == NUVIO_SCREEN_HOME);
+
+    NuvioOpenScreen(&state, NUVIO_SCREEN_LIBRARY);
+    NuvioBack(&state);
+    assert(state.screen == NUVIO_SCREEN_HOME);
     assert(std::strcmp(NuvioScreenName(NUVIO_SCREEN_ADDONS), "Plugins") == 0);
 
     // ---- Plugin list ----

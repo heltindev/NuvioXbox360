@@ -96,6 +96,7 @@ struct NuvioState {
     int profileCount;
     bool cloudProfiles;
     int profileCursor;     // profileCount means the "Add profile" tile
+    NuvioScreen profileReturn; // screen to restore when the avatar opens the picker
     int newProfileColor;
     NuvioScreen createReturn;
 

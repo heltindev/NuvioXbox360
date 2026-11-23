@@ -44,6 +44,7 @@ void NuvioInitialize(NuvioState *state)
     state->selectedCatalogIndex = -1;
     state->catalogMode = NUVIO_CATALOG_TRENDING;
     state->catalogPage = 1;
+    state->profileReturn = NUVIO_SCREEN_LOGIN;
     state->createReturn = NUVIO_SCREEN_LOGIN;
     state->keyboardRow = 1;
     NuvioProfilesEnsureAdmin(state);
@@ -98,8 +99,8 @@ void NuvioMoveVertical(NuvioState *state, int direction, int rowCount)
 
     if (state->sidebarFocused) {
         state->sidebarItem += direction > 0 ? 1 : -1;
-        if (state->sidebarItem < 0) state->sidebarItem = 4;
-        if (state->sidebarItem > 4) state->sidebarItem = 0;
+        if (state->sidebarItem < -1) state->sidebarItem = 4;
+        if (state->sidebarItem > 4) state->sidebarItem = -1;
     } else {
         const int lastRow = rowCount > 0 ? rowCount - 1 : 0;
         state->selectedRow += direction > 0 ? 1 : -1;
@@ -124,6 +125,13 @@ void NuvioSelect(NuvioState *state, int catalogIndex)
     if (state->screen == NUVIO_SCREEN_DETAILS || state->screen == NUVIO_SCREEN_CREATE_PROFILE ||
         state->screen == NUVIO_SCREEN_ADDONS || state->screen == NUVIO_SCREEN_ADD_ADDON) return;
     if (state->sidebarFocused) {
+        if (state->sidebarItem == -1) {
+            state->profileReturn = state->screen;
+            state->profileCursor = state->profileIndex;
+            state->screen = NUVIO_SCREEN_PROFILE;
+            state->sidebarFocused = false;
+            return;
+        }
         NuvioOpenScreen(state, SidebarScreen(state->sidebarItem));
         return;
     }
@@ -132,9 +140,6 @@ void NuvioSelect(NuvioState *state, int catalogIndex)
             state->screen = NUVIO_SCREEN_ADDONS;
             state->selectedRow = 0;
             state->selectedColumn = 0;
-        } else if (state->selectedRow == 1) {
-            state->screen = NUVIO_SCREEN_PROFILE;
-            state->profileCursor = state->profileIndex;
         }
         return;
     }
@@ -176,13 +181,16 @@ void NuvioBack(NuvioState *state)
             state->screen = state->createReturn;
             break;
         case NUVIO_SCREEN_PROFILE:
-            state->screen = NUVIO_SCREEN_LOGIN;
-            state->loginCursor = 0;
+            if (state->profileReturn == NUVIO_SCREEN_LOGIN) {
+                state->screen = NUVIO_SCREEN_LOGIN;
+                state->loginCursor = 0;
+            } else {
+                NuvioOpenScreen(state, state->profileReturn);
+            }
             break;
         default:
-            state->screen = NUVIO_SCREEN_PROFILE;
-            state->profileCursor = state->profileIndex;
-            state->sidebarFocused = false;
+            // B closes the current page; account switching requires selecting the avatar.
+            NuvioOpenScreen(state, NUVIO_SCREEN_HOME);
             break;
     }
 }

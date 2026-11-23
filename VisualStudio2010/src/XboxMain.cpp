@@ -565,9 +565,11 @@ static void DrawSidebar(NuvioGraphics &g, const NuvioState &state) {
     const bool expanded=state.sidebarFocused;
     const float width=expanded?260.0f:88.0f;
     g.Rect(0,0,width,720,Color(13,13,13));
+    if(expanded && state.sidebarItem == -1)
+        g.RoundedRect(14,14,232,60,14,FOCUS_BLUE);
     if(g.HasAvatar(state.profileIndex))g.Avatar(state.profileIndex,24,24,40);
     else {g.Circle(44,44,20,Color(65,65,65));g.Text(35,29,24,"N",TEXT_WHITE);}
-    if(expanded)g.Text(82,31,22,state.profileName,TEXT_WHITE,170);
+    if(expanded)g.Text(82,31,22,state.sidebarItem == -1 ? "Trocar perfil" : state.profileName,TEXT_WHITE,170);
     const char *labels[]={"Inicio","Filmes e series","Busca","Biblioteca","Configuracoes"};
     for(int i=0;i<5;++i) {
         const float y=222.0f+i*76.0f;
@@ -773,10 +775,12 @@ static void DrawSearchScreen(NuvioGraphics &g, const NuvioState &state, bool onl
 
     g.Icon(2, boxX + 16, boxY + 4, 48, state.searchActive ? TEXT_WHITE : TEXT_MUTED);
 
-    if (state.searchQuery[0]) {
-        g.Text(boxX + 72, boxY + 12, 22, state.searchQuery, TEXT_WHITE);
+    // The on-screen keyboard edits textBuffer until the search is submitted.
+    const char *visibleQuery = state.searchActive ? state.textBuffer : state.searchQuery;
+    if (visibleQuery[0]) {
+        g.Text(boxX + 72, boxY + 12, 22, visibleQuery, TEXT_WHITE);
         if (state.searchActive && (GetTickCount() / 500) % 2 == 0) {
-            int textW = (int)std::strlen(state.searchQuery) * 14;
+            int textW = (int)std::strlen(visibleQuery) * 14;
             g.Rect(boxX + 72 + textW, boxY + 14, 2, 28, TEXT_WHITE);
         }
     } else {
@@ -807,7 +811,7 @@ static void DrawLibraryScreen(NuvioGraphics &g, const NuvioState &state, bool on
         DrawRowSection(g, g_catalog, state, r, rail.name, rail.start, rail.count, 200);
     } else g.Text(110, 180, 24, g_catalogLoading ? "Loading library..." : "No items saved to this profile", TEXT_MUTED);
     DrawStatusLine(g, 642);
-    g.Text(110, 685, 16, "A: Details   X: Refresh   B: Profiles", TEXT_DIM);
+    g.Text(110, 685, 16, "A: Details   X: Refresh   B: Home   Avatar: Switch profile", TEXT_DIM);
 }
 
 // ============ SETTINGS SCREEN ============
@@ -842,11 +846,8 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
                  g_addons.fromCloud ? "" : "  (not synchronized)");
     const bool menuActive = !state.sidebarFocused;
     DrawMenuItem(g, 110, 280, 520, "Addons", sub, menuActive && state.selectedRow == 0);
-    DrawMenuItem(g, 110, 370, 520, "Switch profile", state.profileName,
-                 menuActive && state.selectedRow == 1);
-
-    DrawMenuItem(g, 110, 460, 520, "Sync account", "Reload cloud addons and catalog", menuActive && state.selectedRow == 2);
-    DrawMenuItem(g, 110, 550, 520, "Sign out", "Disconnect this device and erase saved session", menuActive && state.selectedRow == 3);
+    DrawMenuItem(g, 110, 370, 520, "Sync account", "Reload cloud addons and catalog", menuActive && state.selectedRow == 1);
+    DrawMenuItem(g, 110, 460, 520, "Sign out", "Disconnect this device and erase saved session", menuActive && state.selectedRow == 2);
 
     // Application card
     g.RoundedRect(680, 110, 490, 240, 12, BG_CARD);
@@ -859,7 +860,7 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
     g.Text(704, 316, 14, "Player nativo FFmpeg / XAudio2 (ate 720p)", TEXT_DIM);
 
     DrawStatusLine(g, 646);
-    g.Text(110, SCREEN_HEIGHT - 36, 16, "Up/Down: Choose    A: Open    B: Back to profiles    Y: Sign out", TEXT_DIM);
+    g.Text(110, SCREEN_HEIGHT - 36, 16, "A: Open    B: Home    Avatar: Switch profile    Y: Sign out", TEXT_DIM);
 }
 
 // ============ PLUGINS SCREEN ============
@@ -1302,6 +1303,12 @@ int main() {
             const bool browse=app.screen==NUVIO_SCREEN_HOME||app.screen==NUVIO_SCREEN_DISCOVER||
                 app.screen==NUVIO_SCREEN_LIBRARY||app.screen==NUVIO_SCREEN_SEARCH_RESULTS;
             if(!g_catalogLoading&&browse&&!app.sidebarFocused)localMask|=XINPUT_GAMEPAD_A|XINPUT_GAMEPAD_Y;
+            // Keep virtual keyboards responsive while poster/catalog requests run.
+            const bool keyboard=app.screen==NUVIO_SCREEN_SEARCH||app.screen==NUVIO_SCREEN_CREATE_PROFILE||
+                app.screen==NUVIO_SCREEN_ADD_ADDON;
+            if(keyboard)localMask|=XINPUT_GAMEPAD_A|XINPUT_GAMEPAD_X|XINPUT_GAMEPAD_Y|
+                XINPUT_GAMEPAD_START|XINPUT_GAMEPAD_LEFT_SHOULDER|XINPUT_GAMEPAD_RIGHT_SHOULDER;
+            if(app.screen==NUVIO_SCREEN_PROFILE)localMask|=XINPUT_GAMEPAD_A|XINPUT_GAMEPAD_X;
             localMask|=XINPUT_GAMEPAD_B;
             g_deferredButtons|=pressed&~localMask;
             pressed&=localMask;
@@ -1342,6 +1349,7 @@ int main() {
                 g_avatarNext = 0;
                 gui.ClearAvatars();
                 app.screen = NUVIO_SCREEN_PROFILE;
+                app.profileReturn = NUVIO_SCREEN_LOGIN;
                 app.profileCursor = app.profileIndex;
                 if (!g_status[0]) SetStatus("Signed in. Profiles synchronized from Nuvio.");
             }
@@ -1555,7 +1563,7 @@ int main() {
         }
 
         default: {
-            if (app.screen == NUVIO_SCREEN_SETTINGS && (bY || (bA && !app.sidebarFocused && app.selectedRow == 3))) {
+            if (app.screen == NUVIO_SCREEN_SETTINGS && (bY || (bA && !app.sidebarFocused && app.selectedRow == 2))) {
                 if (AccountRequest(bridgeIp, "/account/logout")) {
                     NuvioInitialize(&app);
                     NuvioCatalogClear(&g_catalog);
@@ -1568,7 +1576,7 @@ int main() {
                 }
                 break;
             }
-            const int rowCount = app.screen == NUVIO_SCREEN_SETTINGS ? 4 :
+            const int rowCount = app.screen == NUVIO_SCREEN_SETTINGS ? 3 :
                 app.screen==NUVIO_SCREEN_DISCOVER?(DiscoverCount(app,g_catalog)+4)/5:NuvioCatalogRowCount(&g_catalog);
             if (bLeft) NuvioMoveHorizontal(&app, -1);
             if (bRight) NuvioMoveHorizontal(&app, 1);
@@ -1584,7 +1592,7 @@ int main() {
                 while(app.selectedColumn>0&&DiscoverItem(app,g_catalog,app.selectedRow*5+app.selectedColumn)<0)--app.selectedColumn;
             }
             if (bB) NuvioBack(&app);
-            if (bA && app.screen == NUVIO_SCREEN_SETTINGS && !app.sidebarFocused && app.selectedRow == 2) {
+            if (bA && app.screen == NUVIO_SCREEN_SETTINGS && !app.sidebarFocused && app.selectedRow == 1) {
                 ReloadCatalog(gui, bridgeIp, 0, 0, "", true);
                 currentCatalogPage = 0;
             } else if (bA) NuvioSelect(&app,
