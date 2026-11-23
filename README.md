@@ -11,7 +11,10 @@ Cliente nativo de TV para Xbox 360 RGH/JTAG, inspirado no NuvioTV. Abra **Visual
 - Downloads de capas, metadados, fontes e alteracoes de addons fora da thread de desenho.
 - Respostas HTTP de metadados/imagens limitadas a 2 MiB e imagens verificadas antes de descomprimir.
 - Player nativo FFmpeg, renderizacao YUV na GPU e audio XAudio2. Filas de pacotes limitadas em quantidade e bytes, tres quadros de video e audio estereo.
-- Conta QR, sessao salva, addons por perfil, busca, biblioteca e logout mantidos.
+- Conta Nuvio por QR quando necessaria, sessao salva restaurada sem novo QR e entrada local sem QR.
+- Sem conta conectada, nao ha addons preinstalados; ao escolher um perfil da conta Nuvio, os addons dela sao sincronizados automaticamente.
+- Biblioteca em cache de memoria por perfil por ate 5 minutos, com atualizacao manual por X.
+- Saida grafica tenta 1920x1080 e volta a 1280x720 se o dispositivo nao aceitar. A interface usa coordenadas logicas 720p com escala no renderizador.
 - Barra lateral com botoes de 60 pixels, icones de 40 pixels e nomes ao focar.
 - Cliente torrent v1 experimental integrado ao player: metadados e partes verificados com SHA-1, duas partes em cache (ate 8 MiB), sem baixar o filme inteiro em RAM.
 
@@ -25,7 +28,9 @@ Cliente nativo de TV para Xbox 360 RGH/JTAG, inspirado no NuvioTV. Abra **Visual
 | Detalhes | A: escolher episodio/fontes; X: salvar na biblioteca |
 | Fontes | A: reproduzir a fonte selecionada; X: atualizar; B: voltar |
 | Player | A/Start: pausar/continuar; esquerda/direita: voltar/avancar 10 segundos; B: sair do video |
-| Configuracoes | Addons, trocar perfil, sincronizar conta e sair; Y: sair da conta |
+| Configuracoes | Addons, sincronizar conta e sair; Y: sair da conta |
+| Barra lateral | Selecione o avatar com A para mudar de perfil ou vincular outra conta. B retorna ao Inicio nas telas principais |
+| Entrada | Conectar Nuvio ou continuar localmente sem QR; modo local sem addons e biblioteca em nuvem |
 | Addons | A: ativar/desativar ou instalar URL; X: remover; Y: sincronizar |
 
 ## Conversao automatica
@@ -34,13 +39,13 @@ O cliente integra um servidor opcional de conversao para MP4 H.264/SDR ate 720p 
 
 ## Formatos e torrents
 
-Escolha fontes **H.264/AVC ate 720p**, de preferencia com audio AAC estereo. A biblioteca do player tambem oferece codecs legados, mas o teste automatizado desta alteracao validou H.264/AAC em MP4. HEVC/H.265, AV1, DRM e 1080p nao sao garantidos; fontes acima de 1280x720 sao recusadas para manter o consumo limitado.
+Escolha fontes **H.264/AVC ate 720p**, de preferencia com audio AAC estereo. A saida grafica pode ser 1080p, mas isso **nao eleva o limite de decodificacao do video**. O player tambem tenta codecs legados presentes na biblioteca FFmpeg. HEVC/H.265, AV1, DRM e video acima de 1280x720 nao sao suportados no caminho nativo atual.
 
 Links HTTP/HTTPS dos addons entram diretamente no player, com cabecalhos do provedor, redirecionamentos limitados e HTTP Range.
 
 Fontes magnet/infoHash agora entram no cliente BitTorrent **dentro do XEX**, que busca peers por tracker UDP/HTTP ou DHT IPv4, obtem metadados por `ut_metadata`, verifica as partes e entrega os bytes ao FFmpeg. O indice `fileIdx` do addon seleciona o arquivo correto de um torrent com varios arquivos. Nao precisa de um processo rodando no PC para esse caminho.
 
-Esta implementacao e experimental: aceita torrents v1/SHA-1 por TCP sem criptografia de protocolo, metadados de ate 1 MiB e partes de ate 4 MiB. Nao implementa uTP, BitTorrent v2, IPv6 ou conversao de codec. A velocidade depende de peers compativeis e das partes disponiveis. O teste controlado no Windows passou; o novo caminho completo no Xbox/emulador ainda precisa ser confirmado.
+Esta implementacao e experimental: aceita torrents v1/SHA-1 por TCP sem criptografia de protocolo, metadados de ate 1 MiB e partes de ate 4 MiB. Agora consulta mais de um tracker, tenta ate 32 peers durante a obtencao de metadados e pode realizar uma segunda descoberta DHT quando os primeiros peers falham. Reconhece arquivos MP4, MKV, AVI, WMV, M4V, MOV, WebM, TS, M2TS, MPG, MPEG e FLV para selecao no torrent, mas a reproducao depende dos codecs/demuxers realmente disponiveis e do limite de 720p. Nao implementa uTP, BitTorrent v2 puro, IPv6 ou conversao de codec. O novo fluxo precisa ser validado no Xbox fisico antes de ser considerado compativel com redes publicas.
 
 Se voce ja utiliza TorrServer, a configuracao opcional abaixo continua encaminhando o magnet para ele:
 

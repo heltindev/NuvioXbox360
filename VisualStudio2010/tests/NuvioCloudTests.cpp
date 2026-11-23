@@ -61,6 +61,10 @@ int main() {
     assert(Canonical("https://user:password@addon.test").empty());
     assert(Decode(Encode("tmdb:42&x=A%2FB")) == "tmdb:42&x=A%2FB");
     SignedIn();
+    NuvioHttpData restored = { NULL, 0, 0 };
+    assert(NuvioNativeGet("/account/restore",4096,&restored));
+    assert(std::strstr((const char*)restored.bytes,"signed_in") != NULL);
+    delete[] restored.bytes;
     Rows(); Reply("/manifest.json?config=a%2Fb",200,manifest);
     const std::string addons=Addons();
     assert(addons.find("#cloud\n")==0 && addons.find("Mine")!=std::string::npos);
@@ -132,17 +136,17 @@ int main() {
     assert(SelectProfile(1));
     Reply("/rest/v1/addons?",200,"[]");
     assert(Addons()=="#cloud\n" && s_addons.empty());
-    // Empty accounts use the official catalog, without a cloud write.
-    Reply("https://catalog.nuvio.tv/manifest.json",200,manifest);
-    Reply("/catalog/movie/trending.json",200,"{\"metas\":[]}");
+    // Empty accounts do not silently gain the default catalog addon.
     assert(Catalog(0,"")=="#catalog\n");
     // Library uses its original addon and IDs, with a valid empty response.
     Reply("sync_pull_library",200,
         "[{\"content_id\":\"tmdb:42\",\"content_type\":\"movie\",\"name\":\"Saved\","
         "\"addon_base_url\":\"https://addon.test\",\"poster\":\"https://images.test/p.jpg\"}]");
-    assert(LibraryCatalog().find("tmdb:42\tmovie\t0\tSaved")!=std::string::npos);
+    const std::string cachedLibrary=LibraryCatalog();
+    assert(cachedLibrary.find("tmdb:42\tmovie\t0\tSaved")!=std::string::npos);
+    assert(LibraryCatalog()==cachedLibrary); // no second network request within cache TTL
     Reply("sync_pull_library",200,"[]");
-    assert(LibraryCatalog()=="#catalog\n" && s_art.empty());
+    assert(LibraryCatalog(true)=="#catalog\n" && s_art.empty());
     // Native routes decode configured URLs and preserve authenticated session.
     Reply("/rest/v1/addons?",200,"[]");
     Reply("https://new.test/manifest.json",200,manifest);
@@ -160,6 +164,6 @@ int main() {
     assert(pending.empty());
     ClearProfileData();
     assert(s_addons.empty() && s_art.empty() && !s_profileAllowed[1]);
-    std::puts("PASS: cloud owner, profiles, inheritance, configured URLs, TMDB, rails, search, write rollback, library, default catalog, credentials isolation");
+    std::puts("PASS: cloud owner, profiles, inheritance, configured URLs, TMDB, rails, search, write rollback, library cache, no implicit addons, credentials isolation");
     return 0;
 }

@@ -1,6 +1,6 @@
 
 // NUVIO - Xbox 360 Streaming Interface
-// Native 720p Smart TV UI with HTTPS, catalog and Nuvio cloud account on Xbox.
+// Native Xbox TV UI with 1080p output (720p fallback), HTTPS and optional Nuvio account.
 // Screens: Sign in, Who's watching, Create profile, Home, Discover, Search, Library,
 //          Settings, Plugins, Install plugin (virtual keyboard), Details.
 
@@ -23,8 +23,11 @@
 enum {
     SCREEN_WIDTH = 1280,
     SCREEN_HEIGHT = 720,
+    OUTPUT_1080_WIDTH = 1920,
+    OUTPUT_1080_HEIGHT = 1080,
     MAX_POSTERS = 240
 };
+static int g_outputWidth = SCREEN_WIDTH, g_outputHeight = SCREEN_HEIGHT;
 
 static const char *kProfilesFile = "game:\\nuvio_profiles.cfg";
 
@@ -49,6 +52,17 @@ static inline D3DCOLOR Color(int r, int g, int b, int a = 255) {
 
 // Shared data (kept off the stack: the catalog alone is ~150 KB)
 static NuvioCatalog g_catalog;
+static NuvioCatalog g_libraryCache;
+static bool g_libraryCacheValid = false;
+static int g_libraryCacheProfile = 0;
+static DWORD g_libraryCachedAt = 0;
+static const DWORD kLibraryCacheMs = 5 * 60 * 1000;
+static void InvalidateLibraryCache() {
+    g_libraryCacheValid = false;
+    g_libraryCacheProfile = 0;
+}
+static const NuvioState *g_activeApp = NULL;
+static bool GuestMode() { return g_activeApp && g_activeApp->localMode; }
 static FFPlayer *g_player=NULL;
 static DWORD g_playerInputAt=0;
 static NuvioAddonList g_addons;
@@ -117,6 +131,8 @@ static bool SyncRemoteProfiles(NuvioState &app, const char *ip) {
     for (int i = 0; i < count; ++i) app.profiles[i] = remote[i];
     app.profileCount = count;
     app.cloudProfiles = true;
+    app.localMode = false;
+    InvalidateLibraryCache(); // prevent stale library data across Nuvio accounts
     app.profileIndex = app.profileCursor = 0;
     CopyField(app.profileName, sizeof(app.profileName), app.profiles[0].name);
     return true;
@@ -412,8 +428,9 @@ static void DrawLoginScreen(NuvioGraphics &g, const NuvioState &state, bool onli
     g.Text(735, 182, 22, "Your Nuvio account, directly on Xbox 360.", TEXT_MUTED);
     const float bw = 455, bh = 72;
     const float bx = 735;
-    DrawButton(g, bx, 286, bw, bh, "Sign in with QR code", true, true);
-    g.Text(735, 396, 21, "Scan and approve on nuvio.tv", TEXT_MUTED);
+    DrawButton(g, bx, 270, bw, bh, "Connect Nuvio account", state.loginCursor == 0, true);
+    DrawButton(g, bx, 363, bw, bh, "Continue locally (no QR)", state.loginCursor == 1, false);
+    g.Text(735, 458, 18, "Local mode starts without add-ons or cloud library.", TEXT_MUTED);
     if (online) {
         g.Circle(743, 572, 6, ACCENT_GREEN);
         g.Text(759, 559, 17, "Xbox internet connected", ACCENT_GREEN);
@@ -423,11 +440,11 @@ static void DrawLoginScreen(NuvioGraphics &g, const NuvioState &state, bool onli
             g.Text(735, 554, 17, "Network or sign-in connection failed:", ACCENT_GOLD);
             g.Text(735, 582, 16, networkError, TEXT_MUTED, 465);
         } else {
-            g.Text(735, 554, 17, "Press A to connect your Nuvio account", TEXT_MUTED);
+            g.Text(735, 554, 17, "Choose a mode and press A", TEXT_MUTED);
         }
     }
     g.Text(90, SCREEN_HEIGHT - 36, 13, "NUVIO", TEXT_DIM);
-    g.Text(735, SCREEN_HEIGHT - 40, 16, "A: Connect    B: Back", TEXT_DIM);
+    g.Text(735, SCREEN_HEIGHT - 40, 16, "Up/Down: Select    A: Continue", TEXT_DIM);
 }
 
 // ============ PROFILE SELECTION ============
@@ -436,7 +453,7 @@ static void DrawProfileScreen(NuvioGraphics &g, const NuvioState &state, bool on
     DrawNuvioLogo(g, SCREEN_WIDTH / 2 - 36, 40, 1.5f);
     DrawCentered(g, SCREEN_WIDTH / 2, 140, 44, "Who's Watching?", TEXT_WHITE);
 
-    const int tiles = state.profileCount + (!state.cloudProfiles && state.profileCount < NUVIO_MAX_PROFILES ? 1 : 0);
+    const int tiles = state.profileCount + (!state.cloudProfiles && state.profileCount < NUVIO_MAX_PROFILES ? 1 : 0) + 1;
     // NuvioTV-style grid: four cards per row accommodates the six cloud profiles.
     const int columns = tiles <= 4 ? tiles : 4;
     const float tileW = 206, gap = 30;
@@ -464,10 +481,12 @@ static void DrawProfileScreen(NuvioGraphics &g, const NuvioState &state, bool on
             if (state.profiles[i].locked) DrawCentered(g, cx, y + 170, 15, "PIN protected", TEXT_MUTED);
             else if (i == 0) DrawCentered(g, cx, y + 170, 15, "Primary profile", TEXT_MUTED);
         } else {
+            const bool addLocal = !state.cloudProfiles && state.profileCount < NUVIO_MAX_PROFILES && i == state.profileCount;
             g.Circle(cx, y + 74, 50, BORDER_SUBTLE);
             g.Circle(cx, y + 74, 46, BG_DARK);
-            DrawCentered(g, cx, y + 40, 58, "+", TEXT_MUTED);
-            DrawCentered(g, cx, y + 140, 22, "Add local profile", TEXT_MUTED);
+            DrawCentered(g, cx, y + 40, 58, addLocal ? "+" : "N", TEXT_MUTED);
+            DrawCentered(g, cx, y + 140, 19,
+                         addLocal ? "Add local profile" : state.cloudProfiles ? "Switch Nuvio account" : "Connect Nuvio", TEXT_MUTED);
         }
     }
 
@@ -565,9 +584,11 @@ static void DrawSidebar(NuvioGraphics &g, const NuvioState &state) {
     const bool expanded=state.sidebarFocused;
     const float width=expanded?260.0f:88.0f;
     g.Rect(0,0,width,720,Color(13,13,13));
+    if(expanded && state.sidebarItem == -1)
+        g.RoundedRect(14,14,232,60,14,FOCUS_BLUE);
     if(g.HasAvatar(state.profileIndex))g.Avatar(state.profileIndex,24,24,40);
     else {g.Circle(44,44,20,Color(65,65,65));g.Text(35,29,24,"N",TEXT_WHITE);}
-    if(expanded)g.Text(82,31,22,state.profileName,TEXT_WHITE,170);
+    if(expanded)g.Text(82,31,22,state.sidebarItem == -1 ? "Trocar perfil" : state.profileName,TEXT_WHITE,170);
     const char *labels[]={"Inicio","Filmes e series","Busca","Biblioteca","Configuracoes"};
     for(int i=0;i<5;++i) {
         const float y=222.0f+i*76.0f;
@@ -773,10 +794,12 @@ static void DrawSearchScreen(NuvioGraphics &g, const NuvioState &state, bool onl
 
     g.Icon(2, boxX + 16, boxY + 4, 48, state.searchActive ? TEXT_WHITE : TEXT_MUTED);
 
-    if (state.searchQuery[0]) {
-        g.Text(boxX + 72, boxY + 12, 22, state.searchQuery, TEXT_WHITE);
+    // The on-screen keyboard edits textBuffer until the search is submitted.
+    const char *visibleQuery = state.searchActive ? state.textBuffer : state.searchQuery;
+    if (visibleQuery[0]) {
+        g.Text(boxX + 72, boxY + 12, 22, visibleQuery, TEXT_WHITE);
         if (state.searchActive && (GetTickCount() / 500) % 2 == 0) {
-            int textW = (int)std::strlen(state.searchQuery) * 14;
+            int textW = (int)std::strlen(visibleQuery) * 14;
             g.Rect(boxX + 72 + textW, boxY + 14, 2, 28, TEXT_WHITE);
         }
     } else {
@@ -807,7 +830,7 @@ static void DrawLibraryScreen(NuvioGraphics &g, const NuvioState &state, bool on
         DrawRowSection(g, g_catalog, state, r, rail.name, rail.start, rail.count, 200);
     } else g.Text(110, 180, 24, g_catalogLoading ? "Loading library..." : "No items saved to this profile", TEXT_MUTED);
     DrawStatusLine(g, 642);
-    g.Text(110, 685, 16, "A: Details   X: Refresh   B: Profiles", TEXT_DIM);
+    g.Text(110, 685, 16, "A: Details   X: Refresh   B: Home   Avatar: Switch profile", TEXT_DIM);
 }
 
 // ============ SETTINGS SCREEN ============
@@ -842,11 +865,8 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
                  g_addons.fromCloud ? "" : "  (not synchronized)");
     const bool menuActive = !state.sidebarFocused;
     DrawMenuItem(g, 110, 280, 520, "Addons", sub, menuActive && state.selectedRow == 0);
-    DrawMenuItem(g, 110, 370, 520, "Switch profile", state.profileName,
-                 menuActive && state.selectedRow == 1);
-
-    DrawMenuItem(g, 110, 460, 520, "Sync account", "Reload cloud addons and catalog", menuActive && state.selectedRow == 2);
-    DrawMenuItem(g, 110, 550, 520, "Sign out", "Disconnect this device and erase saved session", menuActive && state.selectedRow == 3);
+    DrawMenuItem(g, 110, 370, 520, "Sync account", "Reload cloud addons and catalog", menuActive && state.selectedRow == 1);
+    DrawMenuItem(g, 110, 460, 520, "Sign out", "Disconnect this device and erase saved session", menuActive && state.selectedRow == 2);
 
     // Application card
     g.RoundedRect(680, 110, 490, 240, 12, BG_CARD);
@@ -859,7 +879,7 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
     g.Text(704, 316, 14, "Player nativo FFmpeg / XAudio2 (ate 720p)", TEXT_DIM);
 
     DrawStatusLine(g, 646);
-    g.Text(110, SCREEN_HEIGHT - 36, 16, "Up/Down: Choose    A: Open    B: Back to profiles    Y: Sign out", TEXT_DIM);
+    g.Text(110, SCREEN_HEIGHT - 36, 16, "A: Open    B: Home    Avatar: Switch profile    Y: Sign out", TEXT_DIM);
 }
 
 // ============ PLUGINS SCREEN ============
@@ -869,6 +889,13 @@ static void DrawAddonsScreen(NuvioGraphics &g, const NuvioState &state, bool onl
 
     g.Text(110, 36, 36, "Addons", TEXT_WHITE);
     g.Text(110, 84, 18, "Nuvio cloud addons. A: enable/disable. Y: synchronize.", TEXT_MUTED);
+
+    if (state.localMode) {
+        g.Text(110, 176, 28, "No add-ons in local mode", TEXT_WHITE);
+        g.Text(110, 224, 19, "Choose the avatar and connect a Nuvio account to sync its add-ons.", TEXT_MUTED);
+        g.Text(110, SCREEN_HEIGHT - 36, 16, "B: Back    Avatar: Connect account", TEXT_DIM);
+        return;
+    }
 
     const int total = g_addons.count + 1; // last row = install new plugin
     const int visible = 6;
@@ -960,6 +987,7 @@ static bool ReadSourceRows(const char *path,bool episodes) {
     return BeginRenderRequest(episodes?6:5,0,path,60000);
 }
 static bool LoadSourceRows(bool episodes) {
+    if (GuestMode()) return false;
     char encoded[400], path[512];
     NuvioUrlEncode(encoded,sizeof(encoded),g_sourceId);
     if (episodes) std::sprintf(path,"/videos?id=%s",encoded);
@@ -992,7 +1020,7 @@ static void DrawScreen(NuvioGraphics &g, const NuvioState &state,
     if(state.screen==NUVIO_SCREEN_PLAYER&&g_player) {
         g_player->Update();
         g_videoDevice->SetRenderState(D3DRS_VIEWPORTENABLE,TRUE);
-        D3DRECT screen={0,0,1280,720};g_player->RenderFrame(screen);
+        D3DRECT screen={0,0,g_outputWidth,g_outputHeight};g_player->RenderFrame(screen);
         g.ResumeUI();
         if(g_player->IsBuffering()) {
             std::wstring wide=g_player->StatusText();std::string status(wide.begin(),wide.end());
@@ -1093,7 +1121,10 @@ static void FinishArtwork(NuvioGraphics &gui,const NuvioState &app) {
             NuvioAddonsParse(&g_addons,(const char*)g_artReply.bytes,g_artReply.length);
             SetStatus(g_artKind==8?"Alteracao salva na nuvem.":"Addons sincronizados.");
         } else SetStatus(NuvioNativeLastError());
-    } else if(g_artKind==9)SetStatus(g_artOk?"Adicionado a biblioteca.":NuvioNativeLastError());
+    } else if(g_artKind==9) {
+        if(g_artOk) InvalidateLibraryCache();
+        SetStatus(g_artOk?"Adicionado a biblioteca.":NuvioNativeLastError());
+    }
     NuvioHttpFree(&g_artReply);
 }
 static bool ArtworkRetry(int kind,int index) {
@@ -1146,22 +1177,27 @@ static HANDLE g_catalogThread = NULL;
 static NuvioHttpData g_catalogReply = {NULL, 0, 0};
 static NuvioHttpData g_addonReply = {NULL, 0, 0};
 static bool g_catalogOk = false;
-static int g_requestPage = 0, g_requestMode = 0;
+static int g_requestPage = 0, g_requestMode = 0, g_requestProfileId = 0;
 static char g_requestQuery[512];
 static bool g_refreshCloud = false;
 static DWORD WINAPI CatalogWorker(void *) {
     if (g_refreshCloud) NuvioHttpGet("native", 0, "/addons", 180000, &g_addonReply);
     char path[600];
     if (g_requestMode == 1) std::sprintf(path, "/search.tsv?q=%s", g_requestQuery);
-    else if (g_requestMode == 2) std::strcpy(path, "/library/catalog.tsv");
+    else if (g_requestMode == 2) std::strcpy(path,
+        g_refreshCloud ? "/library/catalog.tsv?refresh=1" : "/library/catalog.tsv");
     else std::sprintf(path, "/catalog.tsv?skip=%d", g_requestPage * 100);
     g_catalogOk = NuvioHttpGet("native", 0, path, 250000, &g_catalogReply);
     return 0;
 }
 static bool ReloadCatalog(NuvioGraphics &, const char *, int page,
                           int mode = 0, const char *query = "", bool refreshCloud = false) {
+    if (GuestMode()) return false;
     if (g_catalogThread) return false;
     g_requestPage = page; g_requestMode = mode; g_refreshCloud = refreshCloud;
+    g_requestProfileId = mode == 2 && g_activeApp && g_activeApp->profileIndex >= 0 &&
+        g_activeApp->profileIndex < g_activeApp->profileCount
+        ? g_activeApp->profiles[g_activeApp->profileIndex].remoteId : 0;
     NuvioUrlEncode(g_requestQuery, sizeof(g_requestQuery), query);
     g_catalogOk = false;
     g_catalogThread = CreateThread(NULL, 128 * 1024, CatalogWorker, NULL, 0, NULL);
@@ -1175,8 +1211,20 @@ static bool FinishCatalog(NuvioGraphics &gui, NuvioState &app, bool &online) {
         NuvioAddonsParse(&g_addons, (const char*)g_addonReply.bytes, g_addonReply.length);
         NuvioHttpFree(&g_addonReply);
     }
+    if (g_requestMode == 2 && (app.localMode || app.profileIndex < 0 ||
+        app.profileIndex >= app.profileCount ||
+        app.profiles[app.profileIndex].remoteId != g_requestProfileId)) {
+        NuvioHttpFree(&g_catalogReply);
+        return true; // Ignore a response belonging to a previously selected profile.
+    }
     bool ok = g_catalogOk && NuvioCatalogLoadText(&g_catalog,
         (const char*)g_catalogReply.bytes, g_catalogReply.length);
+    if (ok && g_requestMode == 2 && g_requestProfileId > 0) {
+        g_libraryCache = g_catalog;
+        g_libraryCacheProfile = g_requestProfileId;
+        g_libraryCachedAt = GetTickCount();
+        g_libraryCacheValid = true;
+    }
     NuvioHttpFree(&g_catalogReply);
     if (ok) {
         gui.ClearPosters(); gui.ClearBackdrop();
@@ -1194,6 +1242,7 @@ static bool FinishCatalog(NuvioGraphics &gui, NuvioState &app, bool &online) {
 
 // ---- Plugins (add-ons live on the bridge; the console mirrors the list) ----
 static bool RefreshAddons(const char *) {
+    if (GuestMode()) return false;
     return BeginRenderRequest(7,0,"/addons",180000);
 }
 
@@ -1216,6 +1265,7 @@ static bool InstallAddon(const char *ip, const char *url) {
 int main() {
     NuvioState app;
     NuvioInitialize(&app);
+    g_activeApp = &app;
     NuvioProfilesLoad(&app, kProfilesFile);
     NuvioAddonsLoadDefaults(&g_addons);
     g_catalog.count = 0;
@@ -1226,8 +1276,8 @@ int main() {
 
     D3DPRESENT_PARAMETERS present;
     ZeroMemory(&present, sizeof(present));
-    present.BackBufferWidth = SCREEN_WIDTH;
-    present.BackBufferHeight = SCREEN_HEIGHT;
+    present.BackBufferWidth = OUTPUT_1080_WIDTH;
+    present.BackBufferHeight = OUTPUT_1080_HEIGHT;
     present.BackBufferFormat = D3DFMT_A8R8G8B8;
     present.BackBufferCount = 1;
     present.SwapEffect = D3DSWAPEFFECT_DISCARD;
@@ -1235,15 +1285,29 @@ int main() {
     present.PresentationInterval = D3DPRESENT_INTERVAL_ONE;
 
     IDirect3DDevice9 *device = NULL;
-    if (FAILED(graphics->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, NULL,
-        D3DCREATE_HARDWARE_VERTEXPROCESSING, &present, &device)) || !device) {
-        graphics->Release();
-        return 2;
+    HRESULT deviceResult = graphics->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, NULL,
+        D3DCREATE_HARDWARE_VERTEXPROCESSING, &present, &device);
+    if (FAILED(deviceResult) || !device) {
+        // Some 360 video modes/emulators cannot allocate a 1080p backbuffer.
+        if (device) { device->Release(); device = NULL; }
+        present.BackBufferWidth = SCREEN_WIDTH;
+        present.BackBufferHeight = SCREEN_HEIGHT;
+        deviceResult = graphics->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, NULL,
+            D3DCREATE_HARDWARE_VERTEXPROCESSING, &present, &device);
+        if (FAILED(deviceResult) || !device) {
+            if (device) device->Release();
+            graphics->Release();
+            return 2;
+        }
+        OutputDebugStringA("NUVIO - 1080p unavailable, using 720p output.\n");
     }
+    g_outputWidth = (int)present.BackBufferWidth;
+    g_outputHeight = (int)present.BackBufferHeight;
 
     g_videoDevice=device;
     NuvioGraphics gui;
-    if (!gui.Initialize(device)) {
+    if (!gui.Initialize(device, (float)g_outputWidth / SCREEN_WIDTH,
+                        (float)g_outputHeight / SCREEN_HEIGHT)) {
         OutputDebugStringA("NUVIO - GPU/font initialization failed\n");
         gui.Shutdown();
         device->Release();
@@ -1255,9 +1319,16 @@ int main() {
     // IP is ignored by the native router; no PC process or bridge is required.
     std::strcpy(bridgeIp, "native");
     const bool networkReady = NuvioNetworkStartup();
-    // NuvioTV launches QR pairing without requiring an initial gamepad click.
-    app.screen = NUVIO_SCREEN_QR_LOGIN;
-    bool autoQrPending = true;
+    // Restore a saved Nuvio session without generating a QR code. Guests are
+    // explicitly allowed to continue locally without a cloud account.
+    if (networkReady && AccountRequest(bridgeIp, "/account/restore") &&
+        g_account.state == ACCOUNT_SIGNED_IN && SyncRemoteProfiles(app, bridgeIp)) {
+        app.screen = NUVIO_SCREEN_PROFILE;
+        app.profileReturn = NUVIO_SCREEN_LOGIN;
+    } else {
+        app.screen = NUVIO_SCREEN_LOGIN;
+        NuvioAddonsLoadDefaults(&g_addons);
+    }
 
     OutputDebugStringA("NUVIO - Streaming UI started\n");
 
@@ -1302,6 +1373,12 @@ int main() {
             const bool browse=app.screen==NUVIO_SCREEN_HOME||app.screen==NUVIO_SCREEN_DISCOVER||
                 app.screen==NUVIO_SCREEN_LIBRARY||app.screen==NUVIO_SCREEN_SEARCH_RESULTS;
             if(!g_catalogLoading&&browse&&!app.sidebarFocused)localMask|=XINPUT_GAMEPAD_A|XINPUT_GAMEPAD_Y;
+            // Keep virtual keyboards responsive while poster/catalog requests run.
+            const bool keyboard=app.screen==NUVIO_SCREEN_SEARCH||app.screen==NUVIO_SCREEN_CREATE_PROFILE||
+                app.screen==NUVIO_SCREEN_ADD_ADDON;
+            if(keyboard)localMask|=XINPUT_GAMEPAD_A|XINPUT_GAMEPAD_X|XINPUT_GAMEPAD_Y|
+                XINPUT_GAMEPAD_START|XINPUT_GAMEPAD_LEFT_SHOULDER|XINPUT_GAMEPAD_RIGHT_SHOULDER;
+            if(app.screen==NUVIO_SCREEN_PROFILE)localMask|=XINPUT_GAMEPAD_A|XINPUT_GAMEPAD_X;
             localMask|=XINPUT_GAMEPAD_B;
             g_deferredButtons|=pressed&~localMask;
             pressed&=localMask;
@@ -1323,15 +1400,6 @@ int main() {
 
         if (pressed & XINPUT_GAMEPAD_BACK) running = false;
 
-        // Present the QR loading screen before a potentially slow HTTPS call.
-        // This also avoids depending on Xenia's keyboard/gamepad mapping for sign-in.
-        if (autoQrPending) {
-            autoQrPending = false;
-            DrawScreen(gui, app, g_catalog, online);
-            BeginQrSignIn(bridgeIp, networkReady, app);
-        }
-
-
         // Sign in with QR code: check the approval every 3 seconds.
         if (app.screen == NUVIO_SCREEN_QR_LOGIN && g_account.state == ACCOUNT_PENDING &&
             GetTickCount() - g_account.lastPoll > 3000) {
@@ -1342,6 +1410,7 @@ int main() {
                 g_avatarNext = 0;
                 gui.ClearAvatars();
                 app.screen = NUVIO_SCREEN_PROFILE;
+                app.profileReturn = NUVIO_SCREEN_LOGIN;
                 app.profileCursor = app.profileIndex;
                 if (!g_status[0]) SetStatus("Signed in. Profiles synchronized from Nuvio.");
             }
@@ -1357,10 +1426,20 @@ int main() {
             break;
 
         case NUVIO_SCREEN_LOGIN:
+            if (bUp || bLeft) NuvioLoginMove(&app, -1);
+            if (bDown || bRight) NuvioLoginMove(&app, 1);
             if (bA || bStart) {
                 NuvioLoginSelect(&app);
-                DrawScreen(gui, app, g_catalog, online);
-                BeginQrSignIn(bridgeIp, networkReady, app);
+                if (app.screen == NUVIO_SCREEN_QR_LOGIN) {
+                    DrawScreen(gui, app, g_catalog, online);
+                    BeginQrSignIn(bridgeIp, networkReady, app);
+                } else {
+                    NuvioCatalogClear(&g_catalog);
+                    NuvioAddonsLoadDefaults(&g_addons);
+                    InvalidateLibraryCache();
+                    gui.ClearPosters(); gui.ClearBackdrop();
+                    online = false;
+                }
             }
             break;
 
@@ -1374,7 +1453,7 @@ int main() {
             if (bLeft) NuvioProfileMove(&app, -1);
             if (bRight) NuvioProfileMove(&app, 1);
             if (bUp && app.profileCursor >= 4) NuvioProfileMove(&app, -4);
-            if (bDown && app.profileCursor + 4 < app.profileCount + (!app.cloudProfiles && app.profileCount < NUVIO_MAX_PROFILES ? 1 : 0))
+            if (bDown && app.profileCursor + 4 < app.profileCount + (!app.cloudProfiles && app.profileCount < NUVIO_MAX_PROFILES ? 1 : 0) + 1)
                 NuvioProfileMove(&app, 4);
             if (bB) NuvioBack(&app);
             if (bX && app.profileCursor > 0 && app.profileCursor < app.profileCount) {
@@ -1387,18 +1466,37 @@ int main() {
             }
             if (bA && app.profileCursor < app.profileCount && app.profiles[app.profileCursor].locked)
                 SetStatus("PIN protected profile. Unlock via Nuvio first.");
-            if (bA && NuvioProfileSelect(&app) == 1) {
-                char profilePath[64];
-                std::sprintf(profilePath, "/profile/select?id=%d", app.profiles[app.profileIndex].remoteId);
-                if (!networkReady || !BridgeCommand(bridgeIp, profilePath)) {
-                    app.screen = NUVIO_SCREEN_PROFILE;
-                    SetStatus("Select an unlocked cloud profile and retry.");
-                } else {
+            if (bA) {
+                const int selection = NuvioProfileSelect(&app);
+                if (selection == 2) {
+                    // The account tile is an explicit request to replace the cloud session.
+                    if (g_account.state == ACCOUNT_SIGNED_IN)
+                        AccountRequest(bridgeIp, "/account/logout");
+                    NuvioAddonsLoadDefaults(&g_addons);
+                    NuvioCatalogClear(&g_catalog);
+                    InvalidateLibraryCache();
+                    gui.ClearPosters(); gui.ClearBackdrop(); gui.ClearAvatars();
+                    online = false;
+                    DrawScreen(gui, app, g_catalog, online);
+                    BeginQrSignIn(bridgeIp, networkReady, app);
+                } else if (selection == 1 && app.localMode) {
+                    NuvioAddonsLoadDefaults(&g_addons);
                     NuvioCatalogClear(&g_catalog);
                     gui.ClearPosters(); gui.ClearBackdrop();
                     online = false;
-                    ReloadCatalog(gui, bridgeIp, 0, 0, "", true);
-                    currentCatalogPage = 0; posterPasses = 0;
+                } else if (selection == 1) {
+                    char profilePath[64];
+                    std::sprintf(profilePath, "/profile/select?id=%d", app.profiles[app.profileIndex].remoteId);
+                    if (!networkReady || !BridgeCommand(bridgeIp, profilePath)) {
+                        app.screen = NUVIO_SCREEN_PROFILE;
+                        SetStatus("Select an unlocked cloud profile and retry.");
+                    } else {
+                        NuvioCatalogClear(&g_catalog);
+                        gui.ClearPosters(); gui.ClearBackdrop();
+                        online = false;
+                        ReloadCatalog(gui, bridgeIp, 0, 0, "", true);
+                        currentCatalogPage = 0; posterPasses = 0;
+                    }
                 }
             }
             break;
@@ -1451,6 +1549,11 @@ int main() {
         }
 
         case NUVIO_SCREEN_ADDONS: {
+            if (app.localMode) {
+                if (bB) NuvioBack(&app);
+                else if (bA || bX || bY) SetStatus("Connect a Nuvio account before managing add-ons.");
+                break;
+            }
             if (bY) {
                 if (RefreshAddons(bridgeIp)) { catalogDirty = true; SetStatus("Cloud addons synchronized."); }
                 else SetStatus(NuvioNativeLastError());
@@ -1548,17 +1651,20 @@ int main() {
                 if (app.searchQuery[0]) {
                     NuvioSearchSubmit(&app);
                     NuvioCatalogClear(&g_catalog); gui.ClearPosters(); gui.ClearBackdrop();
-                    ReloadCatalog(gui, bridgeIp, 0, 1, app.searchQuery);
+                    if (app.localMode) SetStatus("Connect a Nuvio account to search add-ons.");
+                    else ReloadCatalog(gui, bridgeIp, 0, 1, app.searchQuery);
                 }
             }
             break;
         }
 
         default: {
-            if (app.screen == NUVIO_SCREEN_SETTINGS && (bY || (bA && !app.sidebarFocused && app.selectedRow == 3))) {
-                if (AccountRequest(bridgeIp, "/account/logout")) {
+            if (app.screen == NUVIO_SCREEN_SETTINGS && (bY || (bA && !app.sidebarFocused && app.selectedRow == 2))) {
+                if (app.localMode || AccountRequest(bridgeIp, "/account/logout")) {
                     NuvioInitialize(&app);
+                    NuvioProfilesLoad(&app, kProfilesFile);
                     NuvioCatalogClear(&g_catalog);
+                    InvalidateLibraryCache();
                     gui.ClearAvatars(); gui.ClearPosters(); gui.ClearBackdrop();
                     online = false;
                     std::memset(&g_addons, 0, sizeof(g_addons));
@@ -1568,7 +1674,7 @@ int main() {
                 }
                 break;
             }
-            const int rowCount = app.screen == NUVIO_SCREEN_SETTINGS ? 4 :
+            const int rowCount = app.screen == NUVIO_SCREEN_SETTINGS ? 3 :
                 app.screen==NUVIO_SCREEN_DISCOVER?(DiscoverCount(app,g_catalog)+4)/5:NuvioCatalogRowCount(&g_catalog);
             if (bLeft) NuvioMoveHorizontal(&app, -1);
             if (bRight) NuvioMoveHorizontal(&app, 1);
@@ -1584,8 +1690,9 @@ int main() {
                 while(app.selectedColumn>0&&DiscoverItem(app,g_catalog,app.selectedRow*5+app.selectedColumn)<0)--app.selectedColumn;
             }
             if (bB) NuvioBack(&app);
-            if (bA && app.screen == NUVIO_SCREEN_SETTINGS && !app.sidebarFocused && app.selectedRow == 2) {
-                ReloadCatalog(gui, bridgeIp, 0, 0, "", true);
+            if (bA && app.screen == NUVIO_SCREEN_SETTINGS && !app.sidebarFocused && app.selectedRow == 1) {
+                if (app.localMode) SetStatus("Connect a Nuvio account to sync add-ons.");
+                else ReloadCatalog(gui, bridgeIp, 0, 0, "", true);
                 currentCatalogPage = 0;
             } else if (bA) NuvioSelect(&app,
                 (app.screen == NUVIO_SCREEN_HOME || app.screen == NUVIO_SCREEN_DISCOVER)
@@ -1609,6 +1716,7 @@ int main() {
                     SetStatus("Salvando na biblioteca...");
                 else SetStatus("Save failed. Check Nuvio connectivity and try again.");
             } else if (bX && networkReady && app.screen != NUVIO_SCREEN_DETAILS) {
+                if (app.screen == NUVIO_SCREEN_LIBRARY) InvalidateLibraryCache();
                 ReloadCatalog(gui, bridgeIp, currentCatalogPage,
                     app.screen == NUVIO_SCREEN_SEARCH_RESULTS ? 1 : app.screen == NUVIO_SCREEN_LIBRARY ? 2 : 0, app.searchQuery, true);
                 posterPasses = 0;
@@ -1644,7 +1752,7 @@ int main() {
 
             // Native plugins can be configured locally on the Xbox.
             if (app.screen == NUVIO_SCREEN_ADDONS && lastScreen != NUVIO_SCREEN_ADD_ADDON) {
-                if (networkReady && RefreshAddons(bridgeIp)) {
+                if (!app.localMode && networkReady && RefreshAddons(bridgeIp)) {
                     // list is now live
                 } else {
                     g_addons.fromCloud = 0;
@@ -1652,20 +1760,31 @@ int main() {
             }
 
             if (app.screen == NUVIO_SCREEN_SEARCH) NuvioKeyboardBegin(&app, NUVIO_KEYBOARD_SEARCH, app.searchQuery);
-            if (app.screen == NUVIO_SCREEN_LIBRARY && lastScreen != NUVIO_SCREEN_DETAILS && networkReady) {
-                NuvioCatalogClear(&g_catalog); gui.ClearPosters(); gui.ClearBackdrop();
-                ReloadCatalog(gui, bridgeIp, 0, 2);
+            if (app.screen == NUVIO_SCREEN_LIBRARY && lastScreen != NUVIO_SCREEN_DETAILS && !app.localMode) {
+                const int id = app.profileIndex >= 0 && app.profileIndex < app.profileCount
+                    ? app.profiles[app.profileIndex].remoteId : 0;
+                if (g_libraryCacheValid && id > 0 && id == g_libraryCacheProfile &&
+                    (DWORD)(GetTickCount() - g_libraryCachedAt) < kLibraryCacheMs) {
+                    g_catalog = g_libraryCache;
+                    gui.ClearPosters(); gui.ClearBackdrop();
+                    app.selectedRow = app.selectedColumn = 0;
+                    online = true;
+                    SetStatus("Library loaded from memory cache. X: refresh.");
+                } else if (networkReady) {
+                    NuvioCatalogClear(&g_catalog); gui.ClearPosters(); gui.ClearBackdrop();
+                    ReloadCatalog(gui, bridgeIp, 0, 2);
+                }
             }
             if ((app.screen == NUVIO_SCREEN_HOME || app.screen == NUVIO_SCREEN_DISCOVER) &&
                 lastScreen != NUVIO_SCREEN_DETAILS && lastScreen != NUVIO_SCREEN_HOME &&
-                lastScreen != NUVIO_SCREEN_DISCOVER && lastScreen != NUVIO_SCREEN_PROFILE && !g_catalogLoading) {
+                lastScreen != NUVIO_SCREEN_DISCOVER && lastScreen != NUVIO_SCREEN_PROFILE && !g_catalogLoading && !app.localMode) {
                 NuvioCatalogClear(&g_catalog); gui.ClearPosters(); gui.ClearBackdrop();
                 ReloadCatalog(gui, bridgeIp, 0);
             }
 
             // Leaving the plugin list after changes: rebuild the catalog from enabled plugins.
             if (lastScreen == NUVIO_SCREEN_ADDONS && app.screen == NUVIO_SCREEN_SETTINGS &&
-                catalogDirty && networkReady) {
+                catalogDirty && networkReady && !app.localMode) {
                 SetStatus("");
                 DrawScreen(gui, app, g_catalog, online);
                 ReloadCatalog(gui, bridgeIp, 0);

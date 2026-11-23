@@ -11,7 +11,7 @@ public:
     NuvioGraphics();
     ~NuvioGraphics();
 
-    bool Initialize(IDirect3DDevice9 *device);
+    bool Initialize(IDirect3DDevice9 *device, float scaleX = 1.0f, float scaleY = 1.0f);
     void Shutdown();
     void Begin();
     void ResumeUI();
@@ -49,6 +49,7 @@ private:
     IDirect3DTexture9 *CreateTexture(const unsigned char *rgba, int width, int height, bool grayscale);
 
     IDirect3DDevice9 *m_device;
+    float m_scaleX, m_scaleY;
     IDirect3DVertexShader9 *m_vertexShader;
     IDirect3DPixelShader9 *m_pixelShader;
     IDirect3DVertexDeclaration9 *m_vertexDeclaration;

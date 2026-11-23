@@ -55,3 +55,11 @@ Referencias: https://www.bittorrent.org/beps/bep_0003.html, bep_0005.html, bep_0
 - PC conversion integration passed using synthetic 1080p HEVC and 10-bit PQ/BT.2020 clips served through HTTP. Outputs verified as H.264 1280x720/yuv420p BT.709 SDR and AAC stereo, with stream durations within 120 ms. HTTP authentication and Range checks passed.
 - The native player creates conversion jobs on its demux worker, polls pending prepared files and retains the normal seekable MP4 source path. No conversion subprocess runs on Xbox.
 - Physical Xbox startup, real-time A/V synchronization on hardware, long playback, public torrent swarms and AV1 input remain unverified. Complete-file conversion is implemented; real-time conversion is not.
+
+## Alteracoes propostas em 23/11/2026 (ainda sem validacao fisica)
+
+- Entrada local sem QR nao inicia uma sessao Nuvio, com lista de addons vazia. Um login Nuvio salvo pode ser restaurado sem abrir a tela QR; depois de selecionar o perfil, os addons da conta sao carregados no trabalho de catalogo em segundo plano.
+- Cache de biblioteca em RAM por perfil, validade de 5 minutos, invalido ao salvar um titulo ou sair da conta. O backend tambem guarda uma copia temporaria do catalogo e das imagens/metadados da biblioteca para restaurar a tela sem novos downloads; X forca atualizacao.
+- Saida D3D tenta 1920x1080 com fallback para 1280x720. O player continua rejeitando video com largura acima de 1280 ou altura acima de 720; saida Full HD nao significa decodificacao Full HD.
+- Torrent v1: mais trackers consultados, ate 32 peers testados para metadados, tentativa alternativa via DHT e selecao de mais extensoes de video. uTP, peers com criptografia obrigatoria, IPv6 e v2 puro permanecem fora do escopo.
+- Testes do NuvioApp/NuvioCatalog rodaram no compilador C++98 do host. Compilacao Xbox XDK, saida 1080p real, torrents em swarms publicos, fluxo de conta e cache no hardware ainda NAO foram executados nem devem ser considerados homologados.

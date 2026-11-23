@@ -44,6 +44,7 @@ void NuvioInitialize(NuvioState *state)
     state->selectedCatalogIndex = -1;
     state->catalogMode = NUVIO_CATALOG_TRENDING;
     state->catalogPage = 1;
+    state->profileReturn = NUVIO_SCREEN_LOGIN;
     state->createReturn = NUVIO_SCREEN_LOGIN;
     state->keyboardRow = 1;
     NuvioProfilesEnsureAdmin(state);
@@ -98,8 +99,8 @@ void NuvioMoveVertical(NuvioState *state, int direction, int rowCount)
 
     if (state->sidebarFocused) {
         state->sidebarItem += direction > 0 ? 1 : -1;
-        if (state->sidebarItem < 0) state->sidebarItem = 4;
-        if (state->sidebarItem > 4) state->sidebarItem = 0;
+        if (state->sidebarItem < -1) state->sidebarItem = 4;
+        if (state->sidebarItem > 4) state->sidebarItem = -1;
     } else {
         const int lastRow = rowCount > 0 ? rowCount - 1 : 0;
         state->selectedRow += direction > 0 ? 1 : -1;
@@ -124,6 +125,13 @@ void NuvioSelect(NuvioState *state, int catalogIndex)
     if (state->screen == NUVIO_SCREEN_DETAILS || state->screen == NUVIO_SCREEN_CREATE_PROFILE ||
         state->screen == NUVIO_SCREEN_ADDONS || state->screen == NUVIO_SCREEN_ADD_ADDON) return;
     if (state->sidebarFocused) {
+        if (state->sidebarItem == -1) {
+            state->profileReturn = state->screen;
+            state->profileCursor = state->profileIndex;
+            state->screen = NUVIO_SCREEN_PROFILE;
+            state->sidebarFocused = false;
+            return;
+        }
         NuvioOpenScreen(state, SidebarScreen(state->sidebarItem));
         return;
     }
@@ -132,9 +140,6 @@ void NuvioSelect(NuvioState *state, int catalogIndex)
             state->screen = NUVIO_SCREEN_ADDONS;
             state->selectedRow = 0;
             state->selectedColumn = 0;
-        } else if (state->selectedRow == 1) {
-            state->screen = NUVIO_SCREEN_PROFILE;
-            state->profileCursor = state->profileIndex;
         }
         return;
     }
@@ -170,19 +175,22 @@ void NuvioBack(NuvioState *state)
             state->screen = NUVIO_SCREEN_ADDONS;
             break;
         case NUVIO_SCREEN_QR_LOGIN:
-            state->screen = NUVIO_SCREEN_LOGIN;
+            state->screen = state->localMode ? NUVIO_SCREEN_HOME : NUVIO_SCREEN_LOGIN;
             break;
         case NUVIO_SCREEN_CREATE_PROFILE:
             state->screen = state->createReturn;
             break;
         case NUVIO_SCREEN_PROFILE:
-            state->screen = NUVIO_SCREEN_LOGIN;
-            state->loginCursor = 0;
+            if (state->profileReturn == NUVIO_SCREEN_LOGIN) {
+                state->screen = NUVIO_SCREEN_LOGIN;
+                state->loginCursor = 0;
+            } else {
+                NuvioOpenScreen(state, state->profileReturn);
+            }
             break;
         default:
-            state->screen = NUVIO_SCREEN_PROFILE;
-            state->profileCursor = state->profileIndex;
-            state->sidebarFocused = false;
+            // B closes the current page; account switching requires selecting the avatar.
+            NuvioOpenScreen(state, NUVIO_SCREEN_HOME);
             break;
     }
 }
@@ -281,23 +289,30 @@ void NuvioPrevCatalogPage(NuvioState *state)
 
 void NuvioLoginMove(NuvioState *state, int direction)
 {
-    // Account login is exclusively through the official Nuvio device QR flow.
-    (void)direction;
     if (!state || state->screen != NUVIO_SCREEN_LOGIN) return;
-    state->loginCursor = 0;
+    if (direction < 0) state->loginCursor = 0;
+    else if (direction > 0) state->loginCursor = 1;
 }
 
 void NuvioLoginSelect(NuvioState *state)
 {
     if (!state || state->screen != NUVIO_SCREEN_LOGIN) return;
-    state->loginCursor = 0;
-    state->screen = NUVIO_SCREEN_QR_LOGIN; // XboxMain starts official device login.
+    if (state->loginCursor == 1) {
+        state->localMode = true;
+        state->cloudProfiles = false;
+        state->profileIndex = 0;
+        NuvioProfilesEnsureAdmin(state);
+        NuvioOpenScreen(state, NUVIO_SCREEN_HOME);
+    } else {
+        state->localMode = false;
+        state->screen = NUVIO_SCREEN_QR_LOGIN; // XboxMain starts official device login.
+    }
 }
 
 void NuvioProfileMove(NuvioState *state, int direction)
 {
     if (!state || state->screen != NUVIO_SCREEN_PROFILE) return;
-    const int tiles = state->profileCount + (!state->cloudProfiles && state->profileCount < NUVIO_MAX_PROFILES ? 1 : 0);
+    const int tiles = state->profileCount + (!state->cloudProfiles && state->profileCount < NUVIO_MAX_PROFILES ? 1 : 0) + 1;
     state->profileCursor += direction;
     if (state->profileCursor < 0) state->profileCursor = 0;
     if (state->profileCursor > tiles - 1) state->profileCursor = tiles - 1;
@@ -309,15 +324,21 @@ int NuvioProfileSelect(NuvioState *state)
     if (state->profileCursor >= 0 && state->profileCursor < state->profileCount) {
         if (state->profiles[state->profileCursor].locked) return 0; // PIN screen is not implemented yet.
         state->profileIndex = state->profileCursor;
+        state->localMode = !state->cloudProfiles;
         CopyText(state->profileName, sizeof(state->profileName),
                  state->profiles[state->profileIndex].name);
         state->screen = NUVIO_SCREEN_LOGIN; // so OpenScreen accepts the target below
         NuvioOpenScreen(state, NUVIO_SCREEN_HOME);
         return 1;
     }
-    if (state->cloudProfiles) return 0;
-    StartCreateProfile(state, NUVIO_SCREEN_PROFILE);
-    return 0;
+    if (!state->cloudProfiles && state->profileCount < NUVIO_MAX_PROFILES &&
+        state->profileCursor == state->profileCount) {
+        StartCreateProfile(state, NUVIO_SCREEN_PROFILE);
+        return 0;
+    }
+    const int connectTile = state->profileCount +
+        (!state->cloudProfiles && state->profileCount < NUVIO_MAX_PROFILES ? 1 : 0);
+    return state->profileCursor == connectTile ? 2 : 0;
 }
 
 void NuvioProfilesEnsureAdmin(NuvioState *state)
@@ -561,26 +582,11 @@ int NuvioKeyboardPress(NuvioState *state)
 
 // ================= Plugins (Stremio add-ons) =================
 
-static void SetAddon(NuvioAddonList *list, int enabled, const char *name,
-                     const char *desc, const char *url)
-{
-    if (list->count >= NUVIO_MAX_ADDONS) return;
-    NuvioAddon &a = list->items[list->count];
-    a.id = list->count + 1;
-    a.enabled = enabled;
-    CopyText(a.name, sizeof(a.name), name);
-    CopyText(a.desc, sizeof(a.desc), desc);
-    CopyText(a.url, sizeof(a.url), url);
-    ++list->count;
-}
-
 void NuvioAddonsLoadDefaults(NuvioAddonList *list)
 {
     if (!list) return;
     std::memset(list, 0, sizeof(*list));
-    // Only the official catalog is offered locally; installed addons come from cloud.
-    SetAddon(list, 1, "Nuvio Catalog Addon", "Automatic catalog fallback",
-             "https://catalog.nuvio.tv/manifest.json");
+    // The local guest has no add-ons; signed-in users sync their own cloud add-ons.
 }
 
 bool NuvioAddonsParse(NuvioAddonList *list, const char *text, int length)

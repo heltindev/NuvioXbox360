@@ -50,11 +50,17 @@ int main(int argc, char **argv)
     NuvioBack(&state);
     assert(state.screen == NUVIO_SCREEN_LOGIN);
 
-    // ---- Only QR code can start account login ----
+    // ---- Choosing local mode never creates an account session or add-ons ----
     NuvioLoginMove(&state, 1);
+    assert(state.loginCursor == 1);
+    NuvioLoginSelect(&state);
+    assert(state.screen == NUVIO_SCREEN_HOME && state.localMode);
+    state.screen = NUVIO_SCREEN_LOGIN;
+    NuvioLoginMove(&state, -1);
     assert(state.loginCursor == 0);
     NuvioLoginSelect(&state);
     assert(state.screen == NUVIO_SCREEN_QR_LOGIN);
+    assert(!state.localMode);
     // Simulate the Xbox completing remote QR approval and showing profiles.
     state.screen = NUVIO_SCREEN_PROFILE;
 
@@ -84,6 +90,11 @@ int main(int argc, char **argv)
     NuvioBack(&state);
     assert(state.screen == NUVIO_SCREEN_PROFILE);
 
+    state.profileCursor = state.profileCount + 1;  // explicit account connection tile
+    assert(NuvioProfileSelect(&state) == 2);
+    assert(state.screen == NUVIO_SCREEN_PROFILE);
+    state.profileCursor = state.profileCount;
+
     NuvioProfileMove(&state, -1);
     assert(NuvioProfileSelect(&state) == 1);        // enter Maria
     assert(state.screen == NUVIO_SCREEN_HOME);
@@ -112,6 +123,22 @@ int main(int argc, char **argv)
     NuvioBack(&state);
     assert(state.screen == NUVIO_SCREEN_DISCOVER);
     NuvioBack(&state);
+    assert(state.screen == NUVIO_SCREEN_HOME);
+    NuvioBack(&state);                              // B on Home must not open profiles
+    assert(state.screen == NUVIO_SCREEN_HOME);
+
+    // Only explicitly focusing and selecting the sidebar avatar opens profiles.
+    NuvioMoveHorizontal(&state, -1);
+    NuvioMoveVertical(&state, -1, 0);
+    assert(state.sidebarFocused && state.sidebarItem == -1);
+    NuvioSelect(&state, -1);
+    assert(state.screen == NUVIO_SCREEN_PROFILE);
+    NuvioBack(&state);                              // Cancel selection returns to Home
+    assert(state.screen == NUVIO_SCREEN_HOME);
+
+    NuvioMoveHorizontal(&state, -1);
+    NuvioMoveVertical(&state, -1, 0);
+    NuvioSelect(&state, -1);
     assert(state.screen == NUVIO_SCREEN_PROFILE);
 
     // ---- PIN-protected profiles remain locked until PIN verification exists ----
@@ -131,14 +158,33 @@ int main(int argc, char **argv)
     assert(state.selectedRow == 1);
     NuvioBack(&state);
     assert(state.screen == NUVIO_SCREEN_SETTINGS);
+    NuvioBack(&state);
+    assert(state.screen == NUVIO_SCREEN_HOME);
+
+    // Search accepts the on-screen keyboard input and keeps the text on return.
+    NuvioOpenScreen(&state, NUVIO_SCREEN_SEARCH);
+    NuvioKeyboardBegin(&state, NUVIO_KEYBOARD_SEARCH, state.searchQuery);
+    TypeText(&state, "sintel");
+    assert(std::strcmp(state.textBuffer, "sintel") == 0);
+    std::strncpy(state.searchQuery, state.textBuffer, sizeof(state.searchQuery) - 1);
+    state.searchQuery[sizeof(state.searchQuery) - 1] = '\0';
+    NuvioSearchSubmit(&state);
+    assert(state.screen == NUVIO_SCREEN_SEARCH_RESULTS);
+    NuvioBack(&state);
+    assert(state.screen == NUVIO_SCREEN_SEARCH);
+    NuvioBack(&state);
+    assert(state.screen == NUVIO_SCREEN_HOME);
+
+    NuvioOpenScreen(&state, NUVIO_SCREEN_LIBRARY);
+    NuvioBack(&state);
+    assert(state.screen == NUVIO_SCREEN_HOME);
     assert(std::strcmp(NuvioScreenName(NUVIO_SCREEN_ADDONS), "Plugins") == 0);
 
     // ---- Plugin list ----
     NuvioAddonList addons;
     NuvioAddonsLoadDefaults(&addons);
-    assert(addons.count == 1);
-    assert(addons.items[0].enabled && std::strstr(addons.items[0].url, "catalog.nuvio.tv"));
-    assert(NuvioAddonsEnabledCount(&addons) == 1);
+    assert(addons.count == 0 && !addons.fromCloud);
+    assert(NuvioAddonsEnabledCount(&addons) == 0);
 
     const char *tsv = "1\t1\tCinemeta\tCatalog\thttps://v3-cinemeta.strem.io/manifest.json\n"
                       "2\t0\tTorrentio\t\thttps://example.com/manifest.json\n";

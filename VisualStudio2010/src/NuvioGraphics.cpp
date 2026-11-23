@@ -18,7 +18,7 @@ static const char *kPixelSource =
     "float4 main(PS_IN i):COLOR0 { return tex2D(tex,i.uv)*i.tint; }";
 
 NuvioGraphics::NuvioGraphics()
- : m_device(NULL), m_vertexShader(NULL), m_pixelShader(NULL),
+ : m_device(NULL), m_scaleX(1.0f), m_scaleY(1.0f), m_vertexShader(NULL), m_pixelShader(NULL),
    m_vertexDeclaration(NULL), m_white(NULL), m_font(NULL), m_logo(NULL), m_backdrop(NULL),
    m_batchTexture(NULL), m_batch(NULL), m_batchQuads(0)
 {
@@ -75,9 +75,11 @@ IDirect3DTexture9 *NuvioGraphics::CreateTexture(const unsigned char *rgba,
     return tex;
 }
 
-bool NuvioGraphics::Initialize(IDirect3DDevice9 *device)
+bool NuvioGraphics::Initialize(IDirect3DDevice9 *device, float scaleX, float scaleY)
 {
     m_device = device;
+    m_scaleX = scaleX > 0.0f ? scaleX : 1.0f;
+    m_scaleY = scaleY > 0.0f ? scaleY : 1.0f;
     m_batch = new SpriteVertex[MAX_BATCH_QUADS * 4];
     if (!m_batch) return false;
     ID3DXBuffer *compiled = NULL;
@@ -192,7 +194,8 @@ void NuvioGraphics::Quad(float x, float y, float w, float h,
     const float uvX[4] = {u0, u1, u1, u0};
     const float uvY[4] = {v0, v0, v1, v1};
     for (int i = 0; i < 4; ++i) {
-        v[i].x = posX[i]; v[i].y = posY[i]; v[i].z = 0.0f; v[i].w = 1.0f;
+        v[i].x = posX[i] * m_scaleX; v[i].y = posY[i] * m_scaleY;
+        v[i].z = 0.0f; v[i].w = 1.0f;
         v[i].u = uvX[i]; v[i].v = uvY[i];
         v[i].r = r; v[i].g = g; v[i].b = b; v[i].a = a;
     }

@@ -15,6 +15,8 @@ A implementação é C++ para Xbox 360. Não executa Kotlin/Android.
 
 Após o perfil ser autorizado e selecionado, `/profile/select` define o perfil real. A lista de addons é obtida para seu dono de sincronização. A Home consulta os manifests habilitados, depois os endpoints `/catalog/{type}/{id}.json`. A busca consulta somente catálogos que declaram o extra `search`. Catálogos com outros filtros obrigatórios não são pedidos sem esses filtros.
 
+No modo local, sem autenticação da conta Nuvio, a lista de addons começa vazia e nenhuma consulta de catálogo em nuvem é feita. Ao selecionar um perfil Nuvio conectado, a sincronização de addons acontece automaticamente. O cliente não injeta mais o addon de catálogo padrão quando a conta não possui addons instalados.
+
 Os nomes e as divisões das categorias são transportados em TSV interno com cabeçalhos `#catalog` e `#row`. Uma resposta vazia válida limpa a lista; uma falha preserva os dados anteriores. São aceitos IDs como `tmdb:42`, sem presumir prefixo `tt` ou ano obrigatório. O catálogo não importa a base inteira de nenhum serviço.
 
 Metadados, episódios e fontes usam a URL configurada do addon. Credenciais da API Nuvio nunca são enviadas a hosts de addons. URLs de fontes não são exibidas na interface. Ao salvar um título na biblioteca, a origem do addon é preservada.
