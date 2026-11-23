@@ -1,6 +1,11 @@
 @echo off
-setlocal
-cd /d "%~dp0"
+setlocal EnableExtensions
+rem Use the script's folder only when it is the actual VS2010 project.
+set "PROJECT=%~dp0"
+if not exist "%PROJECT%NUVIO.sln" set "PROJECT=%USERPROFILE%\Documents\NuvioXbox360-main\VisualStudio2010\"
+if not exist "%PROJECT%NUVIO.sln" goto missing_project
+cd /d "%PROJECT%"
+if errorlevel 1 goto missing_project
 echo ====================================================
 echo NUVIO Xbox 360 - Restaurar bibliotecas e compilar XEX
 echo Pasta: %CD%
@@ -18,6 +23,12 @@ goto finished
 echo.
 echo ERRO: Preparacao ou compilacao falhou.
 echo Copie a primeira mensagem de erro do PowerShell e envie no chat.
+goto finished
+:missing_project
+echo.
+echo ERRO: NUVIO.sln nao encontrado na pasta do CMD ou em:
+echo %USERPROFILE%\Documents\NuvioXbox360-main\VisualStudio2010
+echo Mova o CMD para a pasta VisualStudio2010 do projeto.
 :finished
 echo.
 pause
