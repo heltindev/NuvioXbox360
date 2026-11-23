@@ -2,17 +2,41 @@
 
 Cliente nativo de TV para Xbox 360 RGH/JTAG, inspirado no NuvioTV. Depois de compilar, abra **VisualStudio2010/bin/Release/NUVIO.xex**.
 
+## IMPORTANTE: testar o menu novo no Xbox 360
+
+A branch `main` ainda possui a interface anterior. **Compilar uma pasta
+`NuvioXbox360-main` antiga, mesmo com `Build succeeded`, nao incorpora
+as alteracoes do PR #2.** Para conferir os quatro icones, as novas configuracoes,
+a opacidade dos links incompativeis e o fallback do decoder:
+
+1. Baixe o ZIP de `fix/native-torrent-peer-discovery` em
+   https://github.com/heltindev/NuvioXbox360/archive/refs/heads/fix/native-torrent-peer-discovery.zip
+   ou use `git clone --branch fix/native-torrent-peer-discovery https://github.com/heltindev/NuvioXbox360.git`.
+2. Extraia em **uma nova pasta**. Nao recompila a copia `NuvioXbox360-main`
+   que veio do ZIP da `main`.
+3. Abra `VisualStudio2010/NUVIO.sln`, selecione `Release | Xbox 360`
+   e execute `Rebuild Solution`.
+4. Verifique a data do arquivo gerado em
+   `VisualStudio2010/bin/Release/NUVIO.xex`. A pasta `VisualStudio2010/Release`
+   **nao** e o `OutDir` configurado em `NUVIO.vcxproj`.
+5. Guarde uma copia do XEX antigo e substitua o executavel realmente
+   iniciado pelo dashboard do Xbox (por exemplo, `default.xex`, se esse
+   for o nome utilizado na instalacao). Teste no hardware.
+
+O PR segue experimental: a compilacao nativa desta revisao e o
+funcionamento real do decoder ainda precisam de validacao no XDK/Xbox.
+
 ## Esta versao
 
 - Interface preta com foco branco, sem animacoes, sem popup por cima dos cartazes.
 - Inicio com fundo, metadados e categorias dos addons; grade separada de filmes/series.
 - Analogico esquerdo, analogico direito e direcional digital, com zona morta e repeticao.
-- Capas de 160x240 em um cache de somente 12 texturas; apenas itens visiveis sao baixados.
+- Capas de 192x288 com filtragem bilinear em cache de 12 texturas; apenas itens visiveis sao baixados.
 - Downloads de capas, metadados, fontes e alteracoes de addons fora da thread de desenho.
 - Respostas HTTP de metadados/imagens limitadas a 2 MiB e imagens verificadas antes de descomprimir.
 - Player nativo FFmpeg, renderizacao YUV na GPU e audio XAudio2. Filas de pacotes limitadas em quantidade e bytes, tres quadros de video e audio estereo.
 - Conta QR, sessao salva, addons por perfil, busca, biblioteca e logout mantidos.
-- Barra lateral com botoes de 60 pixels, icones de 40 pixels e nomes ao focar.
+- Barra lateral com exatamente quatro icones: Inicio (casa), Busca (lupa), Biblioteca (pastas) e Configuracoes (engrenagem), com fundo branco arredondado no item selecionado.
 - Indicador de carregamento inicial de 0 a 100% e pistas A/B/X/Y com cores nativas do controle.
 - Lista de fontes com bandeira de idioma quando o addon informa um idioma reconhecivel; `--` se nao houver informacao confiavel.
 - Cliente torrent v1 experimental integrado ao player: metadados e partes verificados com SHA-1, duas partes em cache (ate 8 MiB), sem baixar o filme inteiro em RAM.
@@ -22,12 +46,11 @@ Cliente nativo de TV para Xbox 360 RGH/JTAG, inspirado no NuvioTV. Depois de com
 | Tela | Controles |
 | --- | --- |
 | Inicio | Direcionais/analogicos: navegar; A: detalhes; X: atualizar; Y: buscar; LB/RB: grupos de categorias |
-| Filmes e series | Y: trocar Filmes/Series/Todos; Start: buscar; A: detalhes |
 | Busca | A: tecla; X: apagar; Y: espaco; Start: pesquisar |
 | Detalhes | A: escolher episodio/fontes; X: salvar na biblioteca |
 | Fontes | A: reproduzir a fonte selecionada; X: atualizar; B: voltar |
-| Player | A/Start: pausar/continuar; esquerda/direita: voltar/avancar 10 segundos; B: sair do video |
-| Configuracoes | Addons, trocar perfil, Streaming P2P, sincronizar conta e sair; B: inicio; Y: sair da conta |
+| Player | A/Start: pausar/continuar; esquerda/direita: voltar/avancar 10 segundos; B: sair do video. Em erro, A/B volta a lista de fontes. |
+| Configuracoes | Cinco categorias: Voce, Visual, Midia, Servicos e Sistema; A abre opcoes implementadas, as demais aparecem apagadas; B: inicio; Y: sair da conta |
 | Streaming P2P | A: ligar/desligar P2P, ocultar detalhes ou limpar o cache; B: configuracoes |
 | Addons | A: ativar/desativar ou instalar URL; X: remover; Y: sincronizar |
 
