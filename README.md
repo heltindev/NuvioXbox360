@@ -25,12 +25,26 @@ Cliente nativo de TV para Xbox 360 RGH/JTAG, inspirado no NuvioTV. Abra **Visual
 | Detalhes | A: escolher episodio/fontes; X: salvar na biblioteca |
 | Fontes | A: reproduzir a fonte selecionada; X: atualizar; B: voltar |
 | Player | A/Start: pausar/continuar; esquerda/direita: voltar/avancar 10 segundos; B: sair do video |
-| Configuracoes | Addons, trocar perfil, sincronizar conta e sair; Y: sair da conta |
+| Configuracoes | Addons, trocar perfil, Streaming P2P, sincronizar conta e sair; B: inicio; Y: sair da conta |
+| Streaming P2P | A: ligar/desligar P2P, ocultar detalhes ou limpar o cache; B: configuracoes |
 | Addons | A: ativar/desativar ou instalar URL; X: remover; Y: sincronizar |
 
 ## Conversao automatica
 
 O cliente integra um servidor opcional de conversao para MP4 H.264/SDR ate 720p com AAC estereo. Para iniciar no PC, execute `tools/start_transcoder.cmd`; copie o `nuvio.cfg` gerado junto com o XEX. O PC precisa ficar ligado. O servidor prepara o arquivo completo antes de reproduzir. Leia [docs/TRANSCODING.md](docs/TRANSCODING.md) para configuracao, magnet/TorrServer e limites.
+
+## Configuracoes P2P no Xbox
+
+Em **Configuracoes > Streaming P2P**, o jogador pode habilitar ou bloquear
+a abertura de fontes magnet no player, ocultar os detalhes tecnicos durante
+o carregamento e limpar o cache de metadados (no maximo 1 MiB).
+Os controles sao salvos no proprio Xbox em `game:\\nuvio_p2p.cfg`.
+O cache `game:\\nuvio_last_torrent.meta` contem somente metadados SHA-1
+verificados do ultimo torrent; os blocos de video continuam limitados a
+duas partes temporarias na RAM e sao liberados ao sair da reproducao.
+
+P2P vem habilitado por padrao, mas o usuario pode desativar a qualquer momento.
+Essas opcoes nao garantem suporte a novos codecs, uTP ou torrents v2-only.
 
 ## Formatos e torrents
 

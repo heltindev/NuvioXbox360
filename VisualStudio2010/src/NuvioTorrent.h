@@ -21,4 +21,6 @@ private:
     NuvioTorrent(const NuvioTorrent &);
     NuvioTorrent &operator=(const NuvioTorrent &);
 };
+// Clears the on-console metadata cache; in-memory piece buffers end with playback.
+bool NuvioTorrentClearCache();
 #endif

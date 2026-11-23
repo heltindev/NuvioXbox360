@@ -32,6 +32,7 @@ int main(int argc,char **argv) {
     AddFallbackTrackers(privateTrackers);
     assert(privateTrackers.size()==1);
     assert(privateTrackers[0]=="udp://127.0.0.1:19001/announce");
+    assert(NuvioTorrentClearCache()); // host implementation does not touch disk
     std::puts("PASS: SHA1, bounded bencode, magnet parsing");
     if(argc<3)return 0;
     WSADATA wsa;assert(WSAStartup(MAKEWORD(2,2),&wsa)==0);

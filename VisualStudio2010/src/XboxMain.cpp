@@ -14,6 +14,7 @@
 #include "NuvioGraphics.h"
 #include "NuvioInput.h"
 #include "NuvioPlayback.h"
+#include "NuvioTorrent.h"
 #include "FFPlayer.h"
 #include <vector>
 #include <string>
@@ -27,6 +28,27 @@ enum {
 };
 
 static const char *kProfilesFile = "game:\\nuvio_profiles.cfg";
+static const char *kP2PConfigFile = "game:\\nuvio_p2p.cfg";
+static bool g_p2pEnabled = true;
+static bool g_hideTorrentStats = false;
+static bool g_playingTorrent = false;
+static void LoadP2PSettings() {
+    std::FILE *file=std::fopen(kP2PConfigFile,"rb");
+    if(!file)return;
+    char line[80];
+    while(std::fgets(line,sizeof(line),file)) {
+        if(!std::strncmp(line,"enabled=",8))g_p2pEnabled=line[8]=='1';
+        if(!std::strncmp(line,"hide_stats=",11))g_hideTorrentStats=line[11]=='1';
+    }
+    std::fclose(file);
+}
+static bool SaveP2PSettings() {
+    std::FILE *file=std::fopen(kP2PConfigFile,"wb");
+    if(!file)return false;
+    bool saved=std::fprintf(file,"enabled=%d\nhide_stats=%d\n",g_p2pEnabled?1:0,g_hideTorrentStats?1:0)>0;
+    if(std::fclose(file)!=0)saved=false;
+    return saved;
+}
 
 // Color palette - dark streaming theme
 static const D3DCOLOR BG_DARK      = D3DCOLOR_ARGB(255, 13, 13, 13);
@@ -841,12 +863,12 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
                  NuvioAddonsEnabledCount(&g_addons),
                  g_addons.fromCloud ? "" : "  (not synchronized)");
     const bool menuActive = !state.sidebarFocused;
-    DrawMenuItem(g, 110, 280, 520, "Addons", sub, menuActive && state.selectedRow == 0);
-    DrawMenuItem(g, 110, 370, 520, "Switch profile", state.profileName,
-                 menuActive && state.selectedRow == 1);
-
-    DrawMenuItem(g, 110, 460, 520, "Sync account", "Reload cloud addons and catalog", menuActive && state.selectedRow == 2);
-    DrawMenuItem(g, 110, 550, 520, "Sign out", "Disconnect this device and erase saved session", menuActive && state.selectedRow == 3);
+    DrawMenuItem(g, 110, 260, 520, "Addons", sub, menuActive && state.selectedRow == 0);
+    DrawMenuItem(g, 110, 338, 520, "Switch profile", state.profileName, menuActive && state.selectedRow == 1);
+    DrawMenuItem(g, 110, 416, 520, "Streaming P2P",
+                 g_p2pEnabled?"Torrent streams enabled":"Torrent streams disabled",menuActive && state.selectedRow == 2);
+    DrawMenuItem(g, 110, 494, 520, "Sync account", "Reload cloud addons and catalog",menuActive && state.selectedRow == 3);
+    DrawMenuItem(g, 110, 572, 520, "Sign out", "Erase account session",menuActive && state.selectedRow == 4);
 
     // Application card
     g.RoundedRect(680, 110, 490, 240, 12, BG_CARD);
@@ -859,7 +881,37 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
     g.Text(704, 316, 14, "Player nativo FFmpeg / XAudio2 (ate 720p)", TEXT_DIM);
 
     DrawStatusLine(g, 646);
-    g.Text(110, SCREEN_HEIGHT - 36, 16, "Up/Down: Choose    A: Open    B: Back to profiles    Y: Sign out", TEXT_DIM);
+    g.Text(110, SCREEN_HEIGHT - 36, 16, "Up/Down: Choose    A: Open    B: Home    Y: Sign out", TEXT_DIM);
+}
+
+// ============ STREAMING P2P SETTINGS ============
+static void DrawP2PSettingsScreen(NuvioGraphics &g,const NuvioState &state,bool online) {
+    DrawGradientBackground(g);
+    DrawUserBadge(g,state,online);
+    g.Text(110,42,38,"Streaming P2P",TEXT_WHITE);
+    g.Text(110,98,18,"Configuracoes de torrent salvas no proprio Xbox 360",TEXT_MUTED);
+    const float x=110,w=1060;
+    const char *titles[]={"Streaming P2P","Ocultar estatisticas de torrent","Limpar cache de torrent"};
+    const char *subtitles[]={
+        "Permitir streams ponto a ponto (torrent), sem PC",
+        "Esconder detalhes tecnicos durante o carregamento",
+        "Apagar metadados salvos (max. 1 MiB); buffer de video temporario"
+    };
+    for(int i=0;i<3;++i) {
+        float y=168+i*136;
+        bool active=state.selectedRow==i;
+        if(active)g.RoundedRect(x-3,y-3,w+6,119,16,FOCUS_BLUE);
+        g.RoundedRect(x,y,w,113,13,active?BG_HOVER:BG_CARD);
+        g.Text(x+28,y+22,26,titles[i],TEXT_WHITE);
+        g.Text(x+28,y+64,17,subtitles[i],TEXT_MUTED,w-220);
+        if(i<2) {
+            bool enabled=i==0?g_p2pEnabled:g_hideTorrentStats;
+            g.RoundedRect(x+w-132,y+35,92,48,24,enabled?ACCENT_GREEN:BG_SIDEBAR);
+            g.RoundedRect(x+w-127+(enabled?44:0),y+41,36,36,18,TEXT_WHITE);
+        } else g.Text(x+w-88,y+37,26,"A",TEXT_WHITE);
+    }
+    DrawStatusLine(g,638);
+    g.Text(110,685,17,"Up/Down: escolher    A: alternar/limpar    B: voltar",TEXT_DIM);
 }
 
 // ============ PLUGINS SCREEN ============
@@ -996,6 +1048,7 @@ static void DrawScreen(NuvioGraphics &g, const NuvioState &state,
         g.ResumeUI();
         if(g_player->IsBuffering()) {
             std::wstring wide=g_player->StatusText();std::string status(wide.begin(),wide.end());
+            if(g_playingTorrent&&g_hideTorrentStats)status="Carregando video P2P...";
             g.Text(40,32,24,status.c_str(),TEXT_WHITE,1180);
         }
         if(g_player->Failed())g.Text(40,90,18,g_player->Error().c_str(),TEXT_WHITE,1140);
@@ -1018,6 +1071,7 @@ static void DrawScreen(NuvioGraphics &g, const NuvioState &state,
         case NUVIO_SCREEN_SEARCH_RESULTS: DrawSearchScreen(g, state, online); break;
         case NUVIO_SCREEN_LIBRARY:        DrawLibraryScreen(g, state, online); break;
         case NUVIO_SCREEN_SETTINGS:       DrawSettingsScreen(g, state, online); break;
+        case NUVIO_SCREEN_P2P_SETTINGS:   DrawP2PSettingsScreen(g, state, online); break;
         case NUVIO_SCREEN_SOURCES:        DrawSourcesScreen(g); break;
         case NUVIO_SCREEN_ADDONS:         DrawAddonsScreen(g, state, online); break;
         case NUVIO_SCREEN_ADD_ADDON:      DrawAddAddonScreen(g, state); break;
@@ -1217,6 +1271,7 @@ int main() {
     NuvioState app;
     NuvioInitialize(&app);
     NuvioProfilesLoad(&app, kProfilesFile);
+    LoadP2PSettings();
     NuvioAddonsLoadDefaults(&g_addons);
     g_catalog.count = 0;
     g_catalog.isDemo = false;
@@ -1353,7 +1408,22 @@ int main() {
             if(bA||bStart)g_player->TogglePause();
             if(bLeft)g_player->SeekRelative(-10);
             if(bRight)g_player->SeekRelative(10);
-            if(bB) {delete g_player;g_player=NULL;app.screen=NUVIO_SCREEN_SOURCES;}
+            if(bB) {delete g_player;g_player=NULL;g_playingTorrent=false;app.screen=NUVIO_SCREEN_SOURCES;}
+            break;
+
+        case NUVIO_SCREEN_P2P_SETTINGS:
+            if(bUp&&app.selectedRow>0)--app.selectedRow;
+            if(bDown&&app.selectedRow<2)++app.selectedRow;
+            if(bB)NuvioBack(&app);
+            else if(bA) {
+                if(app.selectedRow==0)g_p2pEnabled=!g_p2pEnabled;
+                else if(app.selectedRow==1)g_hideTorrentStats=!g_hideTorrentStats;
+                else {
+                    SetStatus(NuvioTorrentClearCache()?"Cache de torrent limpo.":"Falha ao limpar cache de torrent.");
+                    break;
+                }
+                if(!SaveP2PSettings())SetStatus("Falha ao salvar configuracoes P2P.");
+            }
             break;
 
         case NUVIO_SCREEN_LOGIN:
@@ -1516,6 +1586,8 @@ int main() {
                 } else {
                     NuvioPlaybackSource source;
                     if(!NuvioNativePlaybackSource(g_sourceCursor,&source))SetStatus(NuvioNativeLastError());
+                    else if(source.url.find("magnet:?")==0&&!g_p2pEnabled)
+                        SetStatus("Ative Streaming P2P em Configuracoes para abrir torrents.");
                     else {
                         if(!g_player) {g_player=new FFPlayer;if(!g_player->Startup(device)){delete g_player;g_player=NULL;}}
                         if(!g_player)SetStatus("Falha ao iniciar decoder ou audio.");
@@ -1523,6 +1595,7 @@ int main() {
                             gui.ClearPosters();gui.ClearBackdrop();gui.ClearAvatars();
                             std::vector<std::string> urls;urls.push_back(source.url);
                             std::vector<std::wstring> labels;labels.push_back(L"Nuvio");
+                            g_playingTorrent=source.url.find("magnet:?")==0;
                             g_player->Open(urls,labels,source.headers,0,0,0,source.prepareBody);
                             app.screen=NUVIO_SCREEN_PLAYER;g_playerInputAt=GetTickCount();
                         }
@@ -1555,7 +1628,7 @@ int main() {
         }
 
         default: {
-            if (app.screen == NUVIO_SCREEN_SETTINGS && (bY || (bA && !app.sidebarFocused && app.selectedRow == 3))) {
+            if (app.screen == NUVIO_SCREEN_SETTINGS && (bY || (bA && !app.sidebarFocused && app.selectedRow == 4))) {
                 if (AccountRequest(bridgeIp, "/account/logout")) {
                     NuvioInitialize(&app);
                     NuvioCatalogClear(&g_catalog);
@@ -1568,7 +1641,7 @@ int main() {
                 }
                 break;
             }
-            const int rowCount = app.screen == NUVIO_SCREEN_SETTINGS ? 4 :
+            const int rowCount = app.screen == NUVIO_SCREEN_SETTINGS ? 5 :
                 app.screen==NUVIO_SCREEN_DISCOVER?(DiscoverCount(app,g_catalog)+4)/5:NuvioCatalogRowCount(&g_catalog);
             if (bLeft) NuvioMoveHorizontal(&app, -1);
             if (bRight) NuvioMoveHorizontal(&app, 1);
@@ -1584,7 +1657,7 @@ int main() {
                 while(app.selectedColumn>0&&DiscoverItem(app,g_catalog,app.selectedRow*5+app.selectedColumn)<0)--app.selectedColumn;
             }
             if (bB) NuvioBack(&app);
-            if (bA && app.screen == NUVIO_SCREEN_SETTINGS && !app.sidebarFocused && app.selectedRow == 2) {
+            if (bA && app.screen == NUVIO_SCREEN_SETTINGS && !app.sidebarFocused && app.selectedRow == 3) {
                 ReloadCatalog(gui, bridgeIp, 0, 0, "", true);
                 currentCatalogPage = 0;
             } else if (bA) NuvioSelect(&app,

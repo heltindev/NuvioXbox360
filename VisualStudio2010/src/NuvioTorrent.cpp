@@ -218,6 +218,42 @@ struct NuvioTorrent::Impl {
     }
     ~Impl(){Close(peer);Close(control);DeleteCriticalSection(&lock);}
     bool Fail(const char *message){error=message;phase=6;return false;}
+    // Bound the on-disk cache to one verified metadata record (max 1 MiB).
+    // It is stored on the Xbox itself, never on a PC or remote service.
+    bool LoadCachedMetadata() {
+#ifdef _XBOX
+        std::FILE *file=std::fopen("game:\\nuvio_last_torrent.meta","rb");
+        if(!file)return false;
+        char header[24];
+        bool valid=std::fread(header,1,sizeof(header),file)==sizeof(header)&&
+            std::memcmp(header,"NVT1",4)==0&&std::memcmp(header+4,hash.data(),20)==0;
+        std::string bytes;
+        if(valid) {
+            char block[16384];size_t got=0;
+            while((got=std::fread(block,1,sizeof(block),file))>0) {
+                if(bytes.size()+got>1024*1024){valid=false;break;}
+                bytes.append(block,got);
+            }
+            if(std::ferror(file))valid=false;
+        }
+        std::fclose(file);
+        if(valid&&!bytes.empty()&&Sha1(bytes.data(),bytes.size())==hash) {
+            metadata.swap(bytes);return true;
+        }
+#endif
+        return false;
+    }
+    void SaveCachedMetadata() {
+#ifdef _XBOX
+        if(metadata.empty()||metadata.size()>1024*1024)return;
+        std::FILE *file=std::fopen("game:\\nuvio_last_torrent.meta","wb");
+        if(!file)return;
+        std::fwrite("NVT1",1,4,file);
+        std::fwrite(hash.data(),1,20,file);
+        std::fwrite(metadata.data(),1,metadata.size(),file);
+        std::fclose(file);
+#endif
+    }
     SOCKET NewSocket(int type) {
         SOCKET s=socket(AF_INET,type,type==SOCK_STREAM?IPPROTO_TCP:IPPROTO_UDP);
         if(s==INVALID_SOCKET)return s;
@@ -537,7 +573,8 @@ bool NuvioTorrent::Open(const std::string &magnet,std::string &error) {
     for(size_t i=0;i<m->trackers.size()&&i<8&&!m->quit&&m->peers.size()<24;++i)
         m->Tracker(m->trackers[i]);
     if(m->peers.size()<8&&!m->quit)m->Dht(24);
-    bool ready=!m->peers.empty()&&m->Metadata(0);
+    bool fromCache=!m->peers.empty()&&m->LoadCachedMetadata();
+    bool ready=fromCache||(!m->peers.empty()&&m->Metadata(0));
     if(!ready&&!m->quit) {
         size_t firstNew=m->peers.size();
         m->Dht(64);
@@ -550,6 +587,7 @@ bool NuvioTorrent::Open(const std::string &magnet,std::string &error) {
         error=m->error;return false;
     }
     if(!m->FileInfo()){error=m->error;return false;}
+    if(!fromCache)m->SaveCachedMetadata();
     return true;
 }
 int NuvioTorrent::Read(unsigned char *bytes,int count) {
@@ -572,6 +610,16 @@ void NuvioTorrent::Abort() {
 __int64 NuvioTorrent::Size()const{return m->fileSize;}
 const std::string &NuvioTorrent::Filename()const{return m->name;}
 const std::string &NuvioTorrent::Error()const{return m->error;}
+bool NuvioTorrentClearCache() {
+#ifdef _XBOX
+    if(DeleteFileA("game:\\nuvio_last_torrent.meta"))return true;
+    DWORD status=GetLastError();
+    return status==ERROR_FILE_NOT_FOUND||status==ERROR_PATH_NOT_FOUND;
+#else
+    // Host tests have no Xbox game: mount or persistent torrent cache.
+    return true;
+#endif
+}
 const char *NuvioTorrent::Status()const{
     static const char *status[]={"Preparando torrent...","Buscando peers/tracker/DHT...","Obtendo e verificando metadados...",
         "Torrent pronto; preparando video...","Carregando partes verificadas...","Reproduzindo torrent...","Falha no torrent."};

@@ -135,6 +135,9 @@ void NuvioSelect(NuvioState *state, int catalogIndex)
         } else if (state->selectedRow == 1) {
             state->screen = NUVIO_SCREEN_PROFILE;
             state->profileCursor = state->profileIndex;
+        } else if (state->selectedRow == 2) {
+            state->screen = NUVIO_SCREEN_P2P_SETTINGS;
+            state->selectedRow = 0;
         }
         return;
     }
@@ -159,6 +162,18 @@ void NuvioBack(NuvioState *state)
         case NUVIO_SCREEN_SEARCH_RESULTS:
             state->screen = NUVIO_SCREEN_SEARCH;
             state->searchActive = true;
+            break;
+        case NUVIO_SCREEN_P2P_SETTINGS:
+            state->screen = NUVIO_SCREEN_SETTINGS;
+            state->selectedRow = 2;
+            state->sidebarItem = 4;
+            state->sidebarFocused = false;
+            break;
+        case NUVIO_SCREEN_SETTINGS:
+            state->screen = NUVIO_SCREEN_HOME;
+            state->selectedRow = 0;
+            state->sidebarItem = 0;
+            state->sidebarFocused = false;
             break;
         case NUVIO_SCREEN_ADDONS:
             state->screen = NUVIO_SCREEN_SETTINGS;
@@ -202,6 +217,7 @@ const char *NuvioScreenName(NuvioScreen screen)
         case NUVIO_SCREEN_SEARCH_RESULTS: return "Search Results";
         case NUVIO_SCREEN_LIBRARY: return "My Library";
         case NUVIO_SCREEN_SETTINGS: return "Settings";
+        case NUVIO_SCREEN_P2P_SETTINGS: return "Streaming P2P";
         case NUVIO_SCREEN_DETAILS: return "Details";
         case NUVIO_SCREEN_SOURCES: return "Addon sources";
         default: return "Unknown screen";

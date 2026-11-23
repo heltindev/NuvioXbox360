@@ -132,6 +132,17 @@ int main(int argc, char **argv)
     NuvioBack(&state);
     assert(state.screen == NUVIO_SCREEN_SETTINGS);
     assert(std::strcmp(NuvioScreenName(NUVIO_SCREEN_ADDONS), "Plugins") == 0);
+    // P2P options live under settings; B never opens the profile picker.
+    state.selectedRow=2;
+    NuvioSelect(&state,-1);
+    assert(state.screen==NUVIO_SCREEN_P2P_SETTINGS && state.selectedRow==0);
+    assert(std::strcmp(NuvioScreenName(NUVIO_SCREEN_P2P_SETTINGS),"Streaming P2P")==0);
+    NuvioBack(&state);
+    assert(state.screen==NUVIO_SCREEN_SETTINGS && state.selectedRow==2);
+    NuvioBack(&state);
+    assert(state.screen==NUVIO_SCREEN_HOME);
+    NuvioOpenScreen(&state,NUVIO_SCREEN_SETTINGS);
+
 
     // ---- Plugin list ----
     NuvioAddonList addons;
