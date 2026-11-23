@@ -23,6 +23,10 @@ a opacidade dos links incompativeis e o fallback do decoder:
    iniciado pelo dashboard do Xbox (por exemplo, `default.xex`, se esse
    for o nome utilizado na instalacao). Teste no hardware.
 
+No rodape de Configuracoes, a revisao correta mostra o texto
+`Xbox UI4 - 23.11.2026`. Se nao aparecer, o console continua abrindo
+outro XEX ou uma compilacao antiga.
+
 O PR segue experimental: a compilacao nativa desta revisao e o
 funcionamento real do decoder ainda precisam de validacao no XDK/Xbox.
 
