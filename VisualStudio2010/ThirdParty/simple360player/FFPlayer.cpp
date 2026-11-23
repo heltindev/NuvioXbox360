@@ -515,6 +515,8 @@ bool FFPlayer::OpenMedia( std::string& error )
                 error = "Container desconhecido ou dados insuficientes. Teste MP4, MKV ou AVI com codec suportado.";
             else if( error == "Video codec not supported" )
                 error = "Codec ausente no decoder: tente H.264/AVC, Xvid, MPEG-2 ou WMV ate 720p.";
+            else if( error == "No video in this file" )
+                error = "Codec de video nao reconhecido. Escolha outro link H.264/AVC ate 720p.";
             Log::Write( "Player source %u: %s", (unsigned)m_current, err );
             continue;
         }

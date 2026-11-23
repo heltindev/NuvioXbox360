@@ -272,6 +272,16 @@ void NuvioGraphics::Text(float x, float y, float fontSize, const char *text,
     }
 }
 
+void NuvioGraphics::CenteredGlyph(float cx,float cy,float fontSize,char glyph,D3DCOLOR color)
+{
+    const int index=(unsigned char)glyph-32;
+    if(index<0||index>=96)return;
+    const unsigned char *ink=kNuvioGlyphInk[index];
+    const float scale=fontSize/31.0f;
+    char label[2]={glyph,0};
+    Text(cx-(ink[0]+ink[2])*0.5f*scale,cy-(ink[1]+ink[3])*0.5f*scale,fontSize,label,color);
+}
+
 void NuvioGraphics::Icon(int index, float x, float y, float size, D3DCOLOR color)
 {
     if (index < 0 || index >= 5) return;
@@ -325,24 +335,30 @@ void NuvioGraphics::Poster(int index, float x, float y, float w, float h)
 
 void NuvioGraphics::PosterRounded(int index,float x,float y,float w,float h,float radius,D3DCOLOR matte)
 {
-    Poster(index,x,y,w,h);
-    if(radius<=0)return;
+    (void)matte; // Clip the texture itself, preserving the rounded selection underneath.
+    if(radius<=0){Poster(index,x,y,w,h);return;}
+    IDirect3DTexture9 *texture=NULL;
+    for(int i=0;i<POSTER_CACHE_SIZE;++i)if(m_posterIds[i]==index&&m_posters[i]) {
+        texture=m_posters[i];m_posterAge[i]=++m_cacheClock;break;
+    }
+    if(!texture||w<=0||h<=0)return;
     if(radius*2>w)radius=w/2;
     if(radius*2>h)radius=h/2;
-    const int rows=(int)std::ceil(radius),a=(int)(matte>>24)&255;
+    Quad(x,y+radius,w,h-radius*2,0,radius/h,1,(h-radius)/h,texture,0xFFFFFFFF);
+    const int rows=(int)std::ceil(radius);
     for(int row=0;row<rows;++row) {
         const float dist=(std::max)(0.0f,radius-row-0.5f);
         const float inset=radius-(float)std::sqrt((std::max)(0.0f,radius*radius-dist*dist));
-        const int covered=(int)std::floor(inset);
-        if(covered>0) {
-            Rect(x,y+row,covered,1,matte);Rect(x+w-covered,y+row,covered,1,matte);
-            Rect(x,y+h-row-1,covered,1,matte);Rect(x+w-covered,y+h-row-1,covered,1,matte);
-        }
-        const int alpha=(int)(a*(inset-covered)+0.5f);
-        if(alpha>0) {
-            const D3DCOLOR edge=(matte&0x00FFFFFF)|((D3DCOLOR)alpha<<24);
-            Rect(x+covered,y+row,1,1,edge);Rect(x+w-covered-1,y+row,1,1,edge);
-            Rect(x+covered,y+h-row-1,1,1,edge);Rect(x+w-covered-1,y+h-row-1,1,1,edge);
+        const float start=(float)std::ceil(inset);
+        const int alpha=(int)(255*(start-inset)+0.5f);
+        for(int side=0;side<2;++side) {
+            const float yy=side?h-row-1.0f:(float)row;
+            Quad(x+start,y+yy,w-start*2,1,start/w,yy/h,1-start/w,(yy+1)/h,texture,0xFFFFFFFF);
+            if(alpha>0) {
+                const D3DCOLOR edge=D3DCOLOR_ARGB(alpha,255,255,255);
+                Quad(x+start-1,y+yy,1,1,(start-1)/w,yy/h,start/w,(yy+1)/h,texture,edge);
+                Quad(x+w-start,y+yy,1,1,(w-start)/w,yy/h,(w-start+1)/w,(yy+1)/h,texture,edge);
+            }
         }
     }
 }

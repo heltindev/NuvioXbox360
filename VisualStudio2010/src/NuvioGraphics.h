@@ -20,6 +20,7 @@ public:
     void RoundedRect(float x, float y, float w, float h, float radius, D3DCOLOR color);
     void Circle(float x, float y, float radius, D3DCOLOR color);
     void Text(float x, float y, float fontSize, const char *text, D3DCOLOR color, float maxWidth = 9999.0f);
+    void CenteredGlyph(float cx,float cy,float fontSize,char glyph,D3DCOLOR color);
     void Icon(int index, float x, float y, float size, D3DCOLOR color);
     void Logo(float x, float y, float size);
     void Poster(int index, float x, float y, float w, float h);

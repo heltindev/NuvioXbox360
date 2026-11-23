@@ -112,6 +112,21 @@ int main(int argc, char **argv)
     assert(state.profileCount == 1 && state.profileIndex == 0);
 
     // ---- Home / discover navigation ----
+    NuvioState nav;
+    NuvioInitialize(&nav);
+    NuvioOpenScreen(&nav,NUVIO_SCREEN_HOME);
+    NuvioMoveHorizontal(&nav,-1);
+    NuvioMoveVertical(&nav,-1,1);
+    assert(nav.sidebarItem==3); // Home wraps directly to Settings, no movie/series tab.
+    const NuvioScreen destinations[4]={NUVIO_SCREEN_HOME,NUVIO_SCREEN_SEARCH,
+        NUVIO_SCREEN_LIBRARY,NUVIO_SCREEN_SETTINGS};
+    for(int menu=0;menu<4;++menu) {
+        NuvioMoveVertical(&nav,1,1);
+        assert(nav.sidebarItem==menu);
+        NuvioSelect(&nav,-1);
+        assert(nav.screen==destinations[menu]);
+        nav.sidebarFocused=true;
+    }
     NuvioMoveHorizontal(&state, 1);
     assert(state.selectedColumn == 1);
     NuvioMoveHorizontal(&state, -1);

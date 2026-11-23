@@ -82,8 +82,7 @@ static bool PadButton(char b) {return b=='A'||b=='B'||b=='X'||b=='Y';}
 static void DrawPadHint(NuvioGraphics &g,float x,float y,char button,const char *label) {
     g.Circle(x+12,y+13,13,Color(14,14,14));
     g.Circle(x+12,y+12,11,PadColor(button));
-    char letter[2]={button,0};
-    g.Text(x+6,y+4,15,letter,TEXT_WHITE);
+    g.CenteredGlyph(x+12,y+12,15,button,TEXT_WHITE);
     g.Text(x+31,y+4,16,label,TEXT_MUTED,230);
 }
 static void DrawControllerFooter(NuvioGraphics &g,float x,float y,const char *hints) {
@@ -890,6 +889,7 @@ static void DrawSearchScreen(NuvioGraphics &g, const NuvioState &state, bool onl
     }
 
     if (state.searchActive) DrawKeyboard(g, state, 205);
+    else if(g_catalogLoading)g.Text(110,220,24,"Pesquisando filmes e series...",TEXT_MUTED);
     else if (g_catalog.railCount) {
         const int r = state.selectedRow < g_catalog.railCount ? state.selectedRow : 0;
         const NuvioCatalogRail &rail = g_catalog.rails[r];
@@ -922,8 +922,7 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
     g.Rect(0,0,SCREEN_WIDTH,SCREEN_HEIGHT,BG_DARK);
     // The 80px global navigation rail is drawn above this view.
     g.Rect(80,0,218,720,Color(27,27,27));
-    g.Text(101,112,30,"Configura",TEXT_WHITE);
-    g.Text(101,147,30,"coes",TEXT_WHITE);
+    g.Text(96,127,23,"Configuracoes",TEXT_WHITE,198);
     g.Rect(80,199,218,1,Color(61,61,61));
 
     const char *categories[]={"Voce","Visual","Midia","Servicos","Sistema"};
@@ -931,25 +930,24 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
     for(int c=0;c<5;++c) {
         const float y=221+c*56.0f;
         const bool selected=state.settingsCategory==c;
-        if(selected&&state.settingsCategoriesFocused&&!state.sidebarFocused)
-            g.RoundedRect(91,y-3,198,49,9,TEXT_WHITE);
-        if(selected)g.RoundedRect(94,y,192,43,8,Color(44,44,44));
+        const bool focused=selected&&state.settingsCategoriesFocused&&!state.sidebarFocused;
+        if(selected)g.RoundedRect(94,y,192,43,8,focused?TEXT_WHITE:Color(44,44,44));
         g.RoundedRect(102,y+4,35,35,8,selected?Color(70,70,70):Color(34,34,34));
         g.Icon(categoryIcons[c],110,y+12,19,selected?TEXT_WHITE:TEXT_DIM);
-        g.Text(149,y+10,20,categories[c],selected?TEXT_WHITE:Color(154,158,163),138);
+        g.Text(149,y+10,20,categories[c],focused?BG_DARK:selected?TEXT_WHITE:Color(154,158,163),138);
     }
     const int cat=state.settingsCategory>=0&&state.settingsCategory<5?state.settingsCategory:0;
     const char *titles[5][3]={
         {"Conta","Alternar perfil","Sessao em grupo"},
         {"Aparencia","Layout",NULL},
-        {"Conteudo e descoberta","Reproducao",NULL},
+        {"Addons","Streaming P2P",NULL},
         {"Integracoes","Rastreamento",NULL},
         {"Avancadas","Sobre",NULL}
     };
     const char *subtitles[5][3]={
         {"Conta e status de sincronizacao","Mude para um perfil diferente","Junte-se a amigos com um codigo de sessao"},
         {"Temas, icone do app e idioma","Inicio, cartoes, detalhes, streams e navegacao",NULL},
-        {"Gerenciar addons e fontes de descoberta","Player, legendas e Streaming P2P",NULL},
+        {"Gerenciar addons e fontes de descoberta","Ativar P2P, ocultar estatisticas e limpar cache",NULL},
         {"Gerenciar integracoes disponiveis","Provedores para biblioteca e continuar assistindo",NULL},
         {"Inicializacao e comportamento dos perfis","Informacoes do app, atualizacoes e creditos",NULL}
     };
@@ -977,7 +975,7 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
     g.Logo(740,435,26);
     g.Text(772,436,23,"NUVIO",TEXT_WHITE);
     g.Text(665,481,15,"Nuvio para Xbox 360",TEXT_DIM);
-    g.Text(685,506,14,"Versao experimental | Xbox UI4 - 23.11.2026",TEXT_DIM);
+    g.Text(655,506,14,"Xbox UI6 - 23.11.2026 | 4 itens no menu",TEXT_DIM);
     DrawStatusLine(g,645);
     DrawControllerFooter(g,328,685,"A: Abrir    B: Voltar    Y: Sair da conta");
 }
@@ -1084,7 +1082,7 @@ static void DrawDetailsScreen(NuvioGraphics &g,const NuvioCatalog &catalog,int i
     if(g.HasBackdrop()&&g_previewIndex==index)g.Backdrop(0,0,1280,720);
     for(int i=0;i<16;++i)g.Rect(i*80.0f,0,80,720,Color(13,13,13,225-i*9));
     g.Rect(0,590,1280,130,Color(13,13,13,190));
-    g.Text(30,24,17,"B  Voltar",TEXT_WHITE);
+    DrawPadHint(g,30,24,'B'," Voltar");
     g.Text(30,180,42,item.title,TEXT_WHITE,1100);
     char meta[130];std::sprintf(meta,"%d  %s  IMDb %s",item.year,g_previewIndex==index?g_preview.runtime:"",
         g_previewIndex==index&&g_preview.rating[0]?g_preview.rating:"--");
@@ -1092,19 +1090,25 @@ static void DrawDetailsScreen(NuvioGraphics &g,const NuvioCatalog &catalog,int i
     g.Text(30,286,17,g_previewIndex==index?g_preview.genres:"",TEXT_MUTED,950);
     if(g_previewIndex==index)DrawWrapped(g,30,326,19,g_preview.description,84,4);
     else g.Text(30,326,18,"Carregando informacoes...",TEXT_DIM);
-    g.RoundedRect(30,455,380,44,22,TEXT_WHITE);
-    g.Text(65,465,21,item.type=='S'?"A  Escolher episodio":"A  Reproduzir",BG_DARK);
-    g.RoundedRect(425,455,300,44,22,Color(38,38,38));
-    g.Text(447,467,17,"X  Salvar na biblioteca",TEXT_WHITE);
+    g.RoundedRect(30,530,405,58,18,TEXT_WHITE);
+    g.Circle(62,559,15,PadColor('A'));
+    g.CenteredGlyph(62,559,19,'A',TEXT_WHITE);
+    g.Text(90,546,21,item.type=='S'?"Escolher episodio":"Ver links para assistir",BG_DARK,332);
+    g.RoundedRect(453,530,335,58,18,Color(38,38,38));
+    g.Circle(485,559,15,PadColor('X'));
+    g.CenteredGlyph(485,559,19,'X',TEXT_WHITE);
+    g.Text(511,549,17,"Salvar na biblioteca",TEXT_WHITE,266);
     DrawStatusLine(g,680);
 }
 
 // Addon stream discovery and series episode selection.
 static char g_sourceRows[240][160];
+static char g_sourceError[256]="";
 static int g_sourceCount = 0, g_sourceCursor = 0, g_sourceEpisode = -1;
 static bool g_episodePicker = false;
 static char g_sourceId[128];
 static bool ReadSourceRows(const char *path,bool episodes) {
+    g_sourceError[0]=0;
     g_sourceCount=g_sourceCursor=0;g_episodePicker=episodes;
     return BeginRenderRequest(episodes?6:5,0,path,60000);
 }
@@ -1129,9 +1133,42 @@ static StreamCompat SourceCompatibility(const char *row) {
     }
     return result;
 }
+static bool PlaybackFormatError(const std::string &reason) {
+    return reason.find("Codec")!=std::string::npos||reason.find("codec")!=std::string::npos||
+        reason.find("Container")!=std::string::npos||reason.find("container")!=std::string::npos||
+        reason.find("Resolucao")!=std::string::npos;
+}
+static void MarkSourceUnsupported() {
+    if(g_sourceCursor<0||g_sourceCursor>=g_sourceCount)return;
+    char *row=g_sourceRows[g_sourceCursor];
+    const bool country=row[0]=='['&&row[3]==']'&&row[4]==' ';
+    const char *title=row+(country?5:0);
+    if(title[0]=='!'&&title[1]==' ')return;
+    char marked[160];
+    // Preserve the language prefix and terminate even when the display title is full.
+    if(country)std::sprintf(marked,"%.5s! %.152s",row,title);
+    else std::sprintf(marked,"! %.157s",title);
+    CopyField(row,sizeof(g_sourceRows[0]),marked);
+}
+static void DrawPlaybackError(NuvioGraphics &g,const char *reason,bool format) {
+    g.Rect(0,0,SCREEN_WIDTH,SCREEN_HEIGHT,BG_DARK);
+    g.RoundedRect(186,146,908,424,22,Color(27,27,27));
+    g.Circle(263,223,30,Color(157,57,61));
+    g.Text(254,202,36,"!",TEXT_WHITE);
+    g.Text(313,190,30,format?"Formato nao suportado no Xbox 360":
+        "Nao foi possivel reproduzir",TEXT_WHITE,742);
+    g.Text(240,276,21,format?
+        "Escolha outro link em 720p com codec compativel.":
+        "A fonte nao abriu. Tente outro link ou atualize os addons.",TEXT_MUTED,795);
+    DrawWrapped(g,240,335,18,reason,74,3);
+    g.RoundedRect(238,476,254,50,25,TEXT_WHITE);
+    g.Text(266,488,19,"Voltar aos links",BG_DARK);
+    DrawControllerFooter(g,238,538,"A: Voltar    B: Voltar");
+}
 static void DrawSourcesScreen(NuvioGraphics &g) {
+    if(g_sourceError[0]) {DrawPlaybackError(g,g_sourceError,true);return;}
     DrawGradientBackground(g);
-    g.Text(110,40,36,g_episodePicker ? "Choose an episode" : "Addon sources",TEXT_WHITE);
+    g.Text(110,40,36,g_episodePicker ? "Escolha um episodio" : "Links para assistir",TEXT_WHITE);
     if (!g_sourceCount) g.Text(110,140,23,g_artThread?"Carregando episodios/fontes...":g_episodePicker?"Nenhum episodio disponivel.":"Nenhuma fonte retornada.",TEXT_MUTED);
     const int top = g_sourceCursor >= 6 ? g_sourceCursor-5 : 0;
     for (int n=0;n<6 && top+n<g_sourceCount;++n) {
@@ -1162,15 +1199,15 @@ static void DrawSourcesScreen(NuvioGraphics &g) {
             // Fade all visuals, including country flag and source title.
             g.RoundedRect(110,120+n*72,1050,62,10,Color(13,13,13,94));
             char warning[110];
-            std::sprintf(warning,"Requer conversao: %s",compat.reason);
+            std::sprintf(warning,"Nao suportado no Xbox 360: %s",compat.reason);
             g.Text(200,158+n*72,14,warning,Color(175,130,97),850);
         }
     }
     g.Text(110,590,17,"Idioma informado pelo addon; -- = idioma nao identificado.",TEXT_MUTED);
     if (!g_episodePicker) g.Text(110,620,17,
-        "Links apagados exigem conversao. O decoder verifica o formato real.",TEXT_MUTED);
+        "Links apagados: formato incompativel. Prefira H.264/AVC ate 720p.",TEXT_MUTED);
     DrawStatusLine(g,650);
-    DrawControllerFooter(g,110,681,"Up/Down: Choose   A: Open   X: Refresh   B: Back");
+    DrawControllerFooter(g,110,681,"Up/Down: Escolher   A: Abrir   X: Atualizar   B: Voltar");
 }
 
 // ============ MAIN DRAW FUNCTION ============
@@ -1184,24 +1221,7 @@ static void DrawScreen(NuvioGraphics &g, const NuvioState &state,
         // A decoder/demuxer failure gets a visible error view, not a black frame.
         if(g_player->Failed()) {
             const std::string &reason=g_player->Error();
-            const bool format=reason.find("Codec")!=std::string::npos||
-                reason.find("codec")!=std::string::npos||
-                reason.find("Container")!=std::string::npos||
-                reason.find("container")!=std::string::npos||
-                reason.find("Resolucao")!=std::string::npos;
-            g.Rect(0,0,SCREEN_WIDTH,SCREEN_HEIGHT,BG_DARK);
-            g.RoundedRect(186,146,908,424,22,Color(27,27,27));
-            g.Circle(263,223,30,Color(157,57,61));
-            g.Text(254,202,36,"!",TEXT_WHITE);
-            g.Text(313,190,30,format?"Formato nao suportado no Xbox 360":
-                "Nao foi possivel reproduzir",TEXT_WHITE,742);
-            g.Text(240,276,21,format?
-                "Escolha outro link em 720p com codec compativel.":
-                "A fonte nao abriu. Tente outro link ou atualize os addons.",TEXT_MUTED,795);
-            DrawWrapped(g,240,335,18,reason.c_str(),74,3);
-            g.RoundedRect(238,476,254,50,25,TEXT_WHITE);
-            g.Text(266,488,19,"Voltar aos links",BG_DARK);
-            DrawControllerFooter(g,238,538,"A: Voltar    B: Voltar");
+            DrawPlaybackError(g,reason.c_str(),PlaybackFormatError(reason));
             g.End();
             return;
         }
@@ -1379,6 +1399,9 @@ static bool g_catalogOk = false;
 static int g_requestPage = 0, g_requestMode = 0;
 static char g_requestQuery[512];
 static bool g_refreshCloud = false;
+static bool g_catalogPending=false,g_pendingRefresh=false;
+static int g_pendingPage=0,g_pendingMode=0;
+static char g_pendingQuery[512]="";
 static DWORD WINAPI CatalogWorker(void *) {
     if (g_refreshCloud) NuvioHttpGet("native", 0, "/addons", 180000, &g_addonReply);
     char path[600];
@@ -1388,23 +1411,36 @@ static DWORD WINAPI CatalogWorker(void *) {
     g_catalogOk = NuvioHttpGet("native", 0, path, 250000, &g_catalogReply);
     return 0;
 }
-static bool ReloadCatalog(NuvioGraphics &, const char *, int page,
-                          int mode = 0, const char *query = "", bool refreshCloud = false) {
-    if (g_catalogThread) return false;
-    g_requestPage = page; g_requestMode = mode; g_refreshCloud = refreshCloud;
-    NuvioUrlEncode(g_requestQuery, sizeof(g_requestQuery), query);
+static void StartPendingCatalog() {
+    if(!g_catalogPending||g_catalogThread||g_artThread)return;
+    g_requestPage=g_pendingPage;g_requestMode=g_pendingMode;g_refreshCloud=g_pendingRefresh;
+    CopyField(g_requestQuery,sizeof(g_requestQuery),g_pendingQuery);
+    g_catalogPending=false;
     g_catalogOk = false;
     g_catalogThread = CreateThread(NULL, 128 * 1024, CatalogWorker, NULL, 0, NULL);
     g_catalogLoading = g_catalogThread != NULL;
-    return g_catalogLoading;
+    if(!g_catalogLoading)SetStatus("Nao foi possivel iniciar o carregamento. Tente novamente com X.");
+}
+static bool ReloadCatalog(NuvioGraphics &, const char *, int page,
+                          int mode = 0, const char *query = "", bool refreshCloud = false) {
+    // Latest navigation wins. Never run the backend concurrently with artwork or another catalog.
+    g_pendingPage=page;g_pendingMode=mode;g_pendingRefresh=refreshCloud;
+    NuvioUrlEncode(g_pendingQuery,sizeof(g_pendingQuery),query);
+    g_catalogPending=true;g_catalogLoading=true;
+    StartPendingCatalog();
+    return g_catalogPending||g_catalogThread!=NULL;
 }
 static bool FinishCatalog(NuvioGraphics &gui, NuvioState &app, bool &online) {
     if (!g_catalogThread || WaitForSingleObject(g_catalogThread, 0) != WAIT_OBJECT_0) return false;
-    CloseHandle(g_catalogThread); g_catalogThread = NULL; g_catalogLoading = false;
+    CloseHandle(g_catalogThread); g_catalogThread = NULL; g_catalogLoading = g_catalogPending;
     if (g_addonReply.bytes) {
         NuvioAddonsParse(&g_addons, (const char*)g_addonReply.bytes, g_addonReply.length);
         NuvioHttpFree(&g_addonReply);
     }
+    const bool target=(g_requestMode==1&&app.screen==NUVIO_SCREEN_SEARCH_RESULTS)||
+        (g_requestMode==2&&app.screen==NUVIO_SCREEN_LIBRARY)||
+        (g_requestMode==0&&(app.screen==NUVIO_SCREEN_HOME||app.screen==NUVIO_SCREEN_DISCOVER));
+    if(g_catalogPending||!target) {NuvioHttpFree(&g_catalogReply);return true;}
     bool ok = g_catalogOk && NuvioCatalogLoadText(&g_catalog,
         (const char*)g_catalogReply.bytes, g_catalogReply.length);
     NuvioHttpFree(&g_catalogReply);
@@ -1528,6 +1564,7 @@ int main() {
 
         FinishArtwork(gui,app);
         if(FinishCatalog(gui,app,online))posterPasses=0;
+        StartPendingCatalog();
         if(g_artThread||g_catalogLoading) {
             WORD localMask=0xF|XINPUT_GAMEPAD_BACK;
             const bool browse=app.screen==NUVIO_SCREEN_HOME||app.screen==NUVIO_SCREEN_DISCOVER||
@@ -1580,9 +1617,11 @@ int main() {
 
         switch (app.screen) {
         case NUVIO_SCREEN_PLAYER:
-            if(pressed)g_playerInputAt=GetTickCount();
+            if(pressed)g_playerInputAt=GetTickCount();
+
             if(g_player->Failed()) {
                 if(bA||bB||bStart) {
+                    if(PlaybackFormatError(g_player->Error()))MarkSourceUnsupported();
                     SetStatus(g_player->Error().c_str());
                     delete g_player;g_player=NULL;g_playingTorrent=false;
                     g_playerReadyAt=0;app.screen=NUVIO_SCREEN_SOURCES;
@@ -1753,6 +1792,10 @@ int main() {
         }
 
         case NUVIO_SCREEN_SOURCES: {
+            if(g_sourceError[0]) {
+                if(bA||bB)g_sourceError[0]=0;
+                break; // Dismiss the warning without starting playback or leaving the list.
+            }
             if (bUp && g_sourceCursor > 0) --g_sourceCursor;
             if (bDown && g_sourceCursor+1 < g_sourceCount) ++g_sourceCursor;
             if (bB) {
@@ -1770,12 +1813,13 @@ int main() {
                 } else {
                     NuvioPlaybackSource source;
                     const StreamCompat compat=SourceCompatibility(g_sourceRows[g_sourceCursor]);
-                    if(!NuvioNativePlaybackSource(g_sourceCursor,&source))
+                    if(!NuvioNativePlaybackSource(g_sourceCursor,&source)) {
                         SetStatus(NuvioNativeLastError());
+                        if(compat.support==STREAM_UNSUPPORTED)
+                            CopyField(g_sourceError,sizeof(g_sourceError),NuvioNativeLastError());
+                    }
                     else if(compat.support==STREAM_UNSUPPORTED&&source.prepareBody.empty()) {
-                        char warning[120];
-                        std::sprintf(warning,"%s (%s)",UnsupportedMessage(),compat.reason);
-                        SetStatus(warning);
+                        std::sprintf(g_sourceError,"%s (%s)",UnsupportedMessage(),compat.reason);
                     }
                     else if(source.url.find("magnet:?")==0&&!g_p2pEnabled)
                         SetStatus("Ative Streaming P2P em Configuracoes para abrir torrents.");
@@ -1919,7 +1963,7 @@ int main() {
             }
             if ((app.screen == NUVIO_SCREEN_HOME || app.screen == NUVIO_SCREEN_DISCOVER) &&
                 lastScreen != NUVIO_SCREEN_DETAILS && lastScreen != NUVIO_SCREEN_HOME &&
-                lastScreen != NUVIO_SCREEN_DISCOVER && lastScreen != NUVIO_SCREEN_PROFILE && !g_catalogLoading) {
+                lastScreen != NUVIO_SCREEN_DISCOVER && lastScreen != NUVIO_SCREEN_PROFILE) {
                 NuvioCatalogClear(&g_catalog); gui.ClearPosters(); gui.ClearBackdrop();
                 ReloadCatalog(gui, bridgeIp, 0);
             }

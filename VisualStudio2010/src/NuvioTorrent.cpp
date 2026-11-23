@@ -208,12 +208,14 @@ struct NuvioTorrent::Impl {
     std::vector<Endpoint> peers;
     __int64 position,fileOffset,fileSize,totalSize;
     int pieceLength,selectedFile,peerIndex,metadataId,nextPeer;
+    size_t nextMetadataPeer;
+    int metadataRejected;
     bool choked,supportsExtension;
     unsigned clock;
     struct Cache {int piece;unsigned age;std::vector<unsigned char> bytes;Cache():piece(-1),age(0){}};
     Cache cache[2];
     Impl():quit(0),phase(0),peer(INVALID_SOCKET),control(INVALID_SOCKET),position(0),fileOffset(0),
-        fileSize(0),totalSize(0),pieceLength(0),selectedFile(-1),peerIndex(-1),metadataId(0),nextPeer(0),choked(true),supportsExtension(false),clock(0) {
+        fileSize(0),totalSize(0),pieceLength(0),selectedFile(-1),peerIndex(-1),metadataId(0),nextPeer(0),nextMetadataPeer(0),metadataRejected(0),choked(true),supportsExtension(false),clock(0) {
         InitializeCriticalSection(&lock);
     }
     ~Impl(){Close(peer);Close(control);DeleteCriticalSection(&lock);}
@@ -279,13 +281,17 @@ struct NuvioTorrent::Impl {
     bool Send(SOCKET socket,const char *bytes,int count,DWORD deadline) {
         while(count>0) {
             if(!Wait(socket,true,deadline))return false;
-            int n=send(socket,bytes,count,0);if(n<=0)return false;bytes+=n;count-=n;
+            int n=send(socket,bytes,count,0);
+            if(n==SOCKET_ERROR&&WSAGetLastError()==WSAEWOULDBLOCK)continue;
+            if(n<=0)return false;bytes+=n;count-=n;
         }return true;
     }
     bool Receive(SOCKET socket,char *bytes,int count,DWORD deadline) {
         while(count>0) {
             if(!Wait(socket,false,deadline))return false;
-            int n=recv(socket,bytes,count,0);if(n<=0)return false;bytes+=n;count-=n;
+            int n=recv(socket,bytes,count,0);
+            if(n==SOCKET_ERROR&&WSAGetLastError()==WSAEWOULDBLOCK)continue;
+            if(n<=0)return false;bytes+=n;count-=n;
         }return true;
     }
     bool Datagram(const Endpoint &dest,const std::string &request,std::string &reply,int timeout) {
@@ -378,15 +384,18 @@ struct NuvioTorrent::Impl {
             if(n>1&&!Receive(peer,&payload[0],n-1,deadline))return false;
             if(id==0)choked=true;if(id==1)choked=false;
             if(id==5)bitfield=payload;
+            if(id==20&&payload.size()>1&&(unsigned char)payload[0]==2) {
+                Value pex;if(Parser(payload.substr(1)).Parse(pex))CompactPeers(pex.Get("added").text,peers);
+            }
             return true;
         }return false;
     }
-    bool ConnectPeer(int index) {
+    bool ConnectPeer(int index,int timeout=4500) {
         Close(peer);Set(peer,NewSocket(SOCK_STREAM));peerIndex=-1;metadataId=0;choked=true;supportsExtension=false;bitfield.clear();
         if(peer==INVALID_SOCKET||index<0||index>=(int)peers.size())return false;
         sockaddr_in address=Address(peers[index]);int result=connect(peer,(sockaddr*)&address,sizeof(address));
         if(result==SOCKET_ERROR&&WSAGetLastError()!=WSAEWOULDBLOCK&&WSAGetLastError()!=WSAEINPROGRESS)return false;
-        DWORD deadline=GetTickCount()+4500;if(!Wait(peer,true,deadline))return false;
+        DWORD deadline=GetTickCount()+timeout;if(!Wait(peer,true,deadline))return false;
 #ifndef _XBOX
         int socketError=0,length=sizeof(socketError);getsockopt(peer,SOL_SOCKET,SO_ERROR,(char*)&socketError,&length);
         if(socketError)return false;
@@ -398,7 +407,7 @@ struct NuvioTorrent::Impl {
         peerIndex=index;
         supportsExtension=(response[25]&0x10)!=0;
         if(supportsExtension) {
-            std::string ext(1,0);ext+="d1:md11:ut_metadatai1ee1:v8:Nuvio360e";
+            std::string ext(1,0);ext+="d1:md11:ut_metadatai1e6:ut_pexi2ee1:v8:Nuvio360e";
             if(!Message(20,ext,deadline))return false;
         }
         return true;
@@ -407,42 +416,59 @@ struct NuvioTorrent::Impl {
         phase=2;
         DWORD totalDeadline=GetTickCount()+45000;
         for(size_t p=firstPeer;p<peers.size()&&!quit&&(LONG)(totalDeadline-GetTickCount())>0;++p) {
-            if(!ConnectPeer((int)p)||!supportsExtension)continue;
+            nextMetadataPeer=p+1;
+            if(!ConnectPeer((int)p,2500)||!supportsExtension)continue;
             DWORD deadline=GetTickCount()+8000;
             if((LONG)(deadline-totalDeadline)>0)deadline=totalDeadline;
             int metadataSize=0;
-            while(!quit&&!metadataId&&(LONG)(deadline-GetTickCount())>0) {
+            while(!quit&&(!metadataId||!metadataSize)&&(LONG)(deadline-GetTickCount())>0) {
                 int id;std::string payload;
                 if(!ReadMessage(id,payload,deadline))break;
                 if(id==20&&payload.size()>1&&payload[0]==0) {
                     Value ext;
                     if(Parser(payload.substr(1)).Parse(ext)) {
-                        metadataId=(int)ext.Get("m").Get("ut_metadata").number;
-                        metadataSize=(int)ext.Get("metadata_size").number;
+                        const Value &idValue=ext.Get("m").Get("ut_metadata"),&sizeValue=ext.Get("metadata_size");
+                        if(idValue.type=='i'&&idValue.number>=0&&idValue.number<=255)metadataId=(int)idValue.number;
+                        if(sizeValue.type=='i'&&sizeValue.number>0&&sizeValue.number<=1024*1024)metadataSize=(int)sizeValue.number;
                     }
                 }
             }
             if(metadataId<1||metadataId>255||metadataSize<1||metadataSize>1024*1024)continue;
-            std::string collected;bool ok=true;
-            for(int part=0;part*16384<metadataSize&&!quit;++part) {
-                char dict[70];std::sprintf(dict,"d8:msg_typei0e5:piecei%dee",part);
-                std::string request(1,(char)metadataId);request+=dict;
-                if(!Message(20,request,deadline)){ok=false;break;}
-                bool got=false;
-                while(!quit&&(LONG)(deadline-GetTickCount())>0) {
-                    int id;std::string payload;
-                    if(!ReadMessage(id,payload,deadline))break;
-                    if(id!=20||payload.size()<2||(unsigned char)payload[0]!=1)continue;
-                    std::string data=payload.substr(1);Value reply;size_t used=0;
-                    if(!Parser(data).Parse(reply,&used)||reply.Get("piece").number!=part)continue;
-                    if(reply.Get("msg_type").number!=1)break;
-                    int want=(std::min)(16384,metadataSize-part*16384);
-                    if(reply.Get("total_size").number!=metadataSize||(int)(data.size()-used)!=want)break;
-                    collected.append(data,used,want);got=true;break;
+            // BEP 9: bounded pipeline, accept any requested block order and ignore unknown types.
+            const int parts=(metadataSize+16383)/16384;
+            std::string collected(metadataSize,0);
+            std::vector<unsigned char> sent(parts,0),done(parts,0);
+            int received=0,inflight=0;bool ok=true;
+            deadline=GetTickCount()+6000;
+            while(received<parts&&!quit&&(LONG)(totalDeadline-GetTickCount())>0) {
+                DWORD ioDeadline=(LONG)(deadline-totalDeadline)>0?totalDeadline:deadline;
+                for(int part=0;part<parts&&inflight<4;++part)if(!sent[part]) {
+                    char dict[70];std::sprintf(dict,"d8:msg_typei0e5:piecei%dee",part);
+                    std::string request(1,(char)metadataId);request+=dict;
+                    if(!Message(20,request,ioDeadline)){ok=false;break;}
+                    sent[part]=1;++inflight;
                 }
-                if(!got){ok=false;break;}
+                if(!ok)break;
+                int id;std::string payload;
+                if(!ReadMessage(id,payload,ioDeadline)){ok=false;break;}
+                if(id!=20||payload.size()<2||(unsigned char)payload[0]!=1)continue;
+                std::string data=payload.substr(1);Value reply;size_t used=0;
+                if(!Parser(data).Parse(reply,&used)||reply.type!='d')continue;
+                const Value &type=reply.Get("msg_type"),&piece=reply.Get("piece");
+                if(type.type!='i'||piece.type!='i'||piece.number<0||piece.number>=parts)continue;
+                const int part=(int)piece.number;
+                if(!sent[part])continue;
+                if(type.number==2){++metadataRejected;ok=false;break;}
+                if(type.number!=1)continue;
+                int want=(std::min)(16384,metadataSize-part*16384);
+                if(reply.Get("total_size").type!='i'||reply.Get("total_size").number!=metadataSize||
+                    (int)(data.size()-used)!=want){ok=false;break;}
+                if(!done[part]) {
+                    std::memcpy(&collected[part*16384],data.data()+used,want);
+                    done[part]=1;++received;--inflight;deadline=GetTickCount()+6000;
+                }
             }
-            if(ok&&(int)collected.size()==metadataSize&&Sha1(collected.data(),collected.size())==hash) {
+            if(ok&&received==parts&&Sha1(collected.data(),collected.size())==hash) {
                 metadata.swap(collected);return true;
             }
         }
@@ -573,9 +599,11 @@ bool NuvioTorrent::Open(const std::string &magnet,std::string &error) {
     // that use uTP, encryption or lack ut_metadata support.
     for(size_t i=0;i<m->trackers.size()&&i<8&&!m->quit&&m->peers.size()<24;++i)
         m->Tracker(m->trackers[i]);
-    if(m->peers.size()<8&&!m->quit)m->Dht(24);
+    // Try discovered/explicit peers first; do not delay working TCP peers behind a DHT crawl.
+    if(m->peers.empty()&&!m->quit)m->Dht(24);
     bool fromCache=!m->peers.empty()&&m->LoadCachedMetadata();
     bool ready=fromCache||(!m->peers.empty()&&m->Metadata(0));
+    if(!ready&&!m->quit&&m->nextMetadataPeer<m->peers.size())ready=m->Metadata(m->nextMetadataPeer);
     if(!ready&&!m->quit) {
         size_t firstNew=m->peers.size();
         m->Dht(64);
@@ -584,7 +612,8 @@ bool NuvioTorrent::Open(const std::string &magnet,std::string &error) {
     if(!ready) {
         m->Fail(m->quit?"Torrent cancelado.":m->peers.empty()?
             "Nenhum peer encontrado. Verifique trackers, DHT e seeders.":
-            "Nao foi possivel obter metadados de peers TCP com ut_metadata.");
+            m->metadataRejected?"Peers ainda sem metadados completos. Aguarde seeders ou escolha outro link.":
+            "Peers TCP nao enviaram metadados. Tente outro link com seeders ou um link HTTP.");
         error=m->error;return false;
     }
     if(!m->FileInfo()){error=m->error;return false;}

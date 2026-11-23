@@ -54,6 +54,14 @@ static bool RefreshToken();
 
 struct Art { std::string id, poster, background, kind, title, base, description; picojson::value metadata; };
 static std::vector<Art> s_art;
+struct CatalogCacheEntry {
+    int profile,page;unsigned long stamp;
+    std::string query,body;std::vector<Art> art;
+};
+struct ImageCacheEntry {std::string key,data;unsigned long stamp;};
+static std::vector<CatalogCacheEntry> s_catalogCache;
+static std::vector<ImageCacheEntry> s_imageCache;
+static void ClearCatalogCache() {s_catalogCache.clear();s_imageCache.clear();}
 struct CloudAddon {
     std::string base, name;
     bool enabled;
@@ -73,6 +81,7 @@ static std::string Canonical(const std::string &input);
 static std::string AddonUrl(const std::string &base, const std::string &path);
 static void LoadManifest(CloudAddon &a);
 static void ClearProfileData() {
+    ClearCatalogCache();
     s_sources.clear();
     s_art.clear(); s_addons.clear(); s_owner.clear();
     s_profile = s_addonProfile = 0;
@@ -758,6 +767,7 @@ static bool SelectProfile(int id) {
     s_addonProfile = s_primaryAddons[id] ? 1 : id;
     s_addonsLoaded = s_addonsComplete = false;
     s_addons.clear(); s_art.clear();
+    ClearCatalogCache();
     return true;
 }
 
@@ -788,6 +798,7 @@ static bool PullAddons() {
         loaded.push_back(addon);
     }
     s_addons.swap(loaded);
+    ClearCatalogCache(); // Explicit refresh or addon edits must invalidate old discovery data.
     s_addonsLoaded = true;
     s_addonsComplete = a.size() <= 64;
     return true;
@@ -839,6 +850,7 @@ static bool PushAddons(const std::vector<CloudAddon> &next) {
     if (!Api("POST", "/rest/v1/rpc/sync_push_addons", s_access,
         picojson::value(args).serialize(), reply)) return false;
     s_addons = next;
+    ClearCatalogCache();
     return true;
 }
 
@@ -880,6 +892,11 @@ static bool HasExtra(const picojson::value &catalog, const char *name) {
         const picojson::array &a = supported.get<picojson::array>();
         for (size_t i = 0; i < a.size(); ++i) if (AsString(a[i]) == name) return true;
     }
+    const picojson::value &required=Field(catalog,"extraRequired");
+    if(required.is<picojson::array>()) {
+        const picojson::array &a=required.get<picojson::array>();
+        for(size_t i=0;i<a.size();++i)if(AsString(a[i])==name)return true;
+    }
     return false;
 }
 
@@ -902,6 +919,15 @@ static bool RequiresFilter(const picojson::value &catalog, bool search) {
 static std::string Catalog(int page, const std::string &query) {
     if (s_profile < 1 || !EnsureAuth()) return "";
     if (!s_addonsLoaded && !PullAddons()) return "";
+    const bool search=!query.empty();
+    const unsigned long now=GetTickCount();
+    for(size_t i=0;i<s_catalogCache.size();++i) {
+        const CatalogCacheEntry &cached=s_catalogCache[i];
+        if(cached.profile==s_profile&&cached.page==page&&cached.query==query&&
+            (unsigned long)(now-cached.stamp)<300000) {
+            s_art=cached.art;s_error.clear();return cached.body;
+        }
+    }
     // The default catalog is a local fallback, never silently pushed to the account.
     std::vector<CloudAddon> sources = s_addons;
     bool hasCatalog = false, officialInstalled = false;
@@ -910,7 +936,12 @@ static std::string Catalog(int page, const std::string &query) {
         if (!sources[i].enabled) continue;
         LoadManifest(sources[i]);
         const picojson::value &cs = Field(sources[i].manifest, "catalogs");
-        if (cs.is<picojson::array>() && !cs.get<picojson::array>().empty()) hasCatalog = true;
+        if(cs.is<picojson::array>()) {
+            const picojson::array &descriptors=cs.get<picojson::array>();
+            for(size_t c=0;c<descriptors.size();++c)
+                if(!RequiresFilter(descriptors[c],search)&&(!search||HasExtra(descriptors[c],"search")))
+                    hasCatalog=true;
+        }
     }
     if (sources.empty() || (!hasCatalog && !officialInstalled)) {
         CloudAddon a; a.base = kDefaultCatalog; a.enabled = true; sources.push_back(a);
@@ -918,7 +949,6 @@ static std::string Catalog(int page, const std::string &query) {
     std::vector<Art> art;
     std::string out = "#catalog\n";
     int rails = 0, attempted = 0, succeeded = 0;
-    const bool search = !query.empty();
     for (size_t source = 0; source < sources.size() && rails < 24 && art.size() < 240; ++source) {
         CloudAddon &addon = sources[source];
         if (!addon.enabled) continue;
@@ -979,6 +1009,14 @@ static std::string Catalog(int page, const std::string &query) {
     }
     if (!succeeded && attempted > 0) { Error("Addon catalogs unavailable. Press X to retry."); return ""; }
     s_art.swap(art);
+    CatalogCacheEntry cached;cached.profile=s_profile;cached.page=page;
+    cached.query=query;cached.body=out;cached.art=s_art;cached.stamp=GetTickCount();
+    for(size_t i=0;i<s_catalogCache.size();++i)
+        if(s_catalogCache[i].profile==s_profile&&s_catalogCache[i].page==page&&s_catalogCache[i].query==query) {
+            s_catalogCache.erase(s_catalogCache.begin()+i);break;
+        }
+    if(s_catalogCache.size()>=3)s_catalogCache.erase(s_catalogCache.begin());
+    s_catalogCache.push_back(cached);
     return out;
 }
 
@@ -989,6 +1027,11 @@ static Art *Artwork(const std::string &id) {
 
 static std::string Image(const std::string &url, int width, int height, bool roundAvatar) {
     if (url.compare(0, 8, "https://") != 0) return "";
+    char dimensions[50];std::sprintf(dimensions,"|%dx%d|%d",width,height,roundAvatar?1:0);
+    const std::string cacheKey=url+dimensions;
+    for(size_t i=0;i<s_imageCache.size();++i)
+        if(s_imageCache[i].key==cacheKey&&(unsigned long)(GetTickCount()-s_imageCache[i].stamp)<300000)
+            return s_imageCache[i].data;
 #ifndef NUVIO_BACKEND_TEST
     MEMORYSTATUS memory; GlobalMemoryStatus(&memory);
     if(memory.dwAvailPhys<32*1024*1024)return "";
@@ -1044,6 +1087,13 @@ static std::string Image(const std::string &url, int width, int height, bool rou
         }
     }
     stbi_image_free(rgba);
+    size_t cacheBytes=data.size();
+    for(size_t i=0;i<s_imageCache.size();++i)cacheBytes+=s_imageCache[i].data.size();
+    while(!s_imageCache.empty()&&(cacheBytes>6*1024*1024||s_imageCache.size()>=16)) {
+        cacheBytes-=s_imageCache.front().data.size();s_imageCache.erase(s_imageCache.begin());
+    }
+    ImageCacheEntry cached;cached.key=cacheKey;cached.data=data;cached.stamp=GetTickCount();
+    s_imageCache.push_back(cached);
     return data;
 }
 
@@ -1211,7 +1261,7 @@ bool NuvioNativePlaybackSource(int index,NuvioPlaybackSource *source) {
         source->url=converter+"/v1/jobs";
         source->headers="Authorization: Bearer "+token+"\r\nContent-Type: application/json\r\n";
     } else if(UnsupportedVideo(stream)) {
-        Error("Fonte requer conversao. Configure transcode_server/token ou escolha 720p H.264/AVC sem HDR.");return false;
+        Error(UnsupportedMessage());return false;
     }
     return true;
 }

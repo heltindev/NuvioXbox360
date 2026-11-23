@@ -24,6 +24,15 @@
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
+  <!-- XDK captures OutputFile/ImageXexOutput while importing Cpp.props.
+       Set paths first so its EXE and XEX follow the same OutDir. -->
+  <PropertyGroup>
+    <OutDir>$(ProjectDir)bin\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)obj\$(Configuration)\</IntDir>
+    <TargetName>NUVIO</TargetName>
+    <OutputFile>$(OutDir)$(TargetName).exe</OutputFile>
+    <ImageXexOutput>$(OutDir)$(TargetName).xex</ImageXexOutput>
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings" />
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Xbox 360'">
@@ -33,16 +42,6 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Xbox 360'">
-    <OutDir>$(ProjectDir)bin\$(Configuration)\</OutDir>
-    <IntDir>$(ProjectDir)obj\$(Configuration)\</IntDir>
-    <TargetName>NUVIO</TargetName>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Xbox 360'">
-    <OutDir>$(ProjectDir)bin\$(Configuration)\</OutDir>
-    <IntDir>$(ProjectDir)obj\$(Configuration)\</IntDir>
-    <TargetName>NUVIO</TargetName>
-  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Xbox 360'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -103,5 +102,11 @@
     <ClCompile Include="ThirdParty\simple360player\FFPlayer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="CopyXboxRelease" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Release|Xbox 360'">
+    <Error Condition="!Exists('$(OutDir)$(TargetName).xex')" Text="NUVIO.xex was not generated; do not deploy an older executable." />
+    <MakeDir Directories="$(ProjectDir)Release" />
+    <Copy SourceFiles="$(OutDir)$(TargetName).xex" DestinationFiles="$(ProjectDir)Release\$(TargetName).xex" />
+    <Message Importance="high" Text="Xbox UI6 ready: $(ProjectDir)Release\$(TargetName).xex" />
+  </Target>
   <ImportGroup Label="ExtensionTargets" />
 </Project>

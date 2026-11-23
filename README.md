@@ -1,34 +1,41 @@
-# NUVIO — v0.1.0-alpha.2
+# NUVIO - v0.1.0-alpha.2
 
-Cliente nativo de TV para Xbox 360 RGH/JTAG, inspirado no NuvioTV. Depois de compilar, abra **VisualStudio2010/bin/Release/NUVIO.xex**.
+Cliente nativo de TV para Xbox 360 RGH/JTAG, inspirado no NuvioTV. Depois de compilar, abra **VisualStudio2010/Release/NUVIO.xex**.
 
-## IMPORTANTE: testar o menu novo no Xbox 360
+## Compilar e testar o menu atualizado
 
-A branch `main` ainda possui a interface anterior. **Compilar uma pasta
-`NuvioXbox360-main` antiga, mesmo com `Build succeeded`, nao incorpora
-as alteracoes do PR #2.** Para conferir os quatro icones, as novas configuracoes,
-a opacidade dos links incompativeis e o fallback do decoder:
+Esta copia inclui o menu com quatro itens, as cinco categorias de configuracoes
+e os avisos de formatos incompativeis. Para gerar um XEX atualizado nesta pasta:
 
-1. Baixe o ZIP de `fix/native-torrent-peer-discovery` em
-   https://github.com/heltindev/NuvioXbox360/archive/refs/heads/fix/native-torrent-peer-discovery.zip
-   ou use `git clone --branch fix/native-torrent-peer-discovery https://github.com/heltindev/NuvioXbox360.git`.
-2. Extraia em **uma nova pasta**. Nao recompila a copia `NuvioXbox360-main`
-   que veio do ZIP da `main`.
-3. Abra `VisualStudio2010/NUVIO.sln`, selecione `Release | Xbox 360`
-   e execute `Rebuild Solution`.
-4. Verifique a data do arquivo gerado em
-   `VisualStudio2010/bin/Release/NUVIO.xex`. A pasta `VisualStudio2010/Release`
-   **nao** e o `OutDir` configurado em `NUVIO.vcxproj`.
-5. Guarde uma copia do XEX antigo e substitua o executavel realmente
-   iniciado pelo dashboard do Xbox (por exemplo, `default.xex`, se esse
-   for o nome utilizado na instalacao). Teste no hardware.
+1. Execute `VisualStudio2010/BUILD-RELEASE.cmd` (VS2010 e XDK necessarios).
+   O comando restaura dependencias ausentes e recompila o aplicativo.
+2. Aguarde `READY`. Se houver erro, nao copie um executavel antigo.
+3. Copie **VisualStudio2010/Release/NUVIO.xex** para o Xbox.
+   A compilacao tambem mantem o original em `VisualStudio2010/bin/Release/NUVIO.xex`.
+4. Substitua o executavel realmente aberto pelo dashboard. Se a sua instalacao usa
+   `default.xex`, copie o novo XEX com esse nome na pasta correspondente.
+5. Abra Configuracoes: o rodape deve mostrar **Xbox UI6 - 23.11.2026**.
 
-No rodape de Configuracoes, a revisao correta mostra o texto
-`Xbox UI4 - 23.11.2026`. Se nao aparecer, o console continua abrindo
-outro XEX ou uma compilacao antiga.
+Links HEVC/AV1 e outros formatos explicitamente incompativeis ficam apagados.
+Ao seleciona-los sem conversor configurado, aparece a tela
+`Formato nao suportado no Xbox 360`; A/B retorna a mesma lista.
+Formatos sem identificacao continuam sendo verificados pelo decoder.
+Compilacao Release com VS2010/XDK e testes locais de navegacao/backend verificados em 23.11.2026.
+A reproducao real e a aparencia final precisam ser conferidas no Xbox.
 
-O PR segue experimental: a compilacao nativa desta revisao e o
-funcionamento real do decoder ainda precisam de validacao no XDK/Xbox.
+## Revisao Xbox UI6 - 23.11.2026
+
+- Letras A/B/X/Y centralizadas pelos limites reais dos glifos; engrenagem com oito dentes.
+- A borda branca acompanha os cantos do poster sem uma mascara escura sobre a selecao.
+- Detalhes exibem botoes visiveis para ver links/escolher episodio e salvar na biblioteca.
+- Pesquisa e catalogo aguardam o carregamento de imagens; o backend nunca executa essas tarefas simultaneamente. Resultados de uma tela antiga sao descartados.
+- Cache durante a sessao: ate tres paginas/consultas por cinco minutos, restaurando tambem os IDs e metadados de arte. Imagens usam cache separado, limitado a 6 MiB/16 entradas. Trocar de perfil, sair da conta, alterar addons ou atualizar explicitamente invalida o cache.
+- Busca reconhece descritores `extraRequired` e usa o catalogo padrao quando os addons instalados nao fornecem busca e o catalogo padrao nao foi desativado explicitamente.
+- Torrent tenta os peers conhecidos antes do DHT, aceita handshakes de extensao em etapas e recebe ate quatro blocos de metadados em paralelo, incluindo respostas fora de ordem. Peers que recusam metadados sao substituidos; SHA-1 continua obrigatorio.
+- Verificado no Windows: testes de backend/cache/busca e quatro cenarios torrent locais (normal, varios arquivos, metadados maiores/fora de ordem/recusa, dados corrompidos). Compilacao Release Xbox 360/XDK concluida.
+- Reproducao com os links reais, disponibilidade de peers e aparencia no console continuam dependendo de teste no Xbox. O cache de catalogo/imagens nao persiste ao fechar o aplicativo. Nao foram adicionados uTP, criptografia de protocolo ou BitTorrent v2.
+
+Teste de transporte local depois de `VisualStudio2010/run_torrent_tests.bat`: `python tools/test_torrent_integration.py`. Nao usa filmes reais nem peers externos.
 
 ## Esta versao
 
@@ -119,8 +126,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\prepare_release.ps1
 
 O script restaura as fontes fixadas de FFmpeg e mbedTLS **sem sobrescrever
 modificacoes locais**, compila mbedTLS/HTTPS, zlib/FFmpeg, guard/video,
-depois recompila `NUVIO.sln` em `Release | Xbox 360`. Ao fim ele
-verifica a existencia de `bin\Release\NUVIO.xex` e exibe a data do arquivo.
+depois recompila `NUVIO.vcxproj` em `Release | Xbox 360`. Ao fim ele
+verifica o cabecalho e a data de `Release\NUVIO.xex`, copiado do novo binario em `bin\Release`.
 Requer conexao com a internet para baixar as dependencias ausentes.
 Nao copie um XEX antigo caso o script apresente erro.
 
