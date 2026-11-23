@@ -47,6 +47,8 @@ public:
     void RenderFrame( const D3DRECT& screen );
 
     std::wstring StatusText() const;
+    // Preparation stage (0..100), not the percentage of the full torrent downloaded.
+    int StartupPercent() const;
 
     // Numbers for the stats-for-nerds overlay.
     struct Stats
