@@ -152,6 +152,17 @@ public:
     }
 };
 static std::string BString(const std::string &s) {char n[24];std::sprintf(n,"%u:",(unsigned)s.size());return n+s;}
+// Public fallback trackers from NuvioTV; keep private/custom trackers isolated.
+static void AddFallbackTrackers(std::vector<std::string> &trackers) {
+    if(!trackers.empty())return;
+    const char *defaults[]={
+        "udp://tracker.opentrackr.org:1337/announce",
+        "udp://tracker.torrent.eu.org:451/announce",
+        "udp://tracker.publictracker.xyz:6969/announce",
+        "udp://open.stealth.si:80/announce"
+    };
+    for(size_t i=0;i<sizeof(defaults)/sizeof(defaults[0]);++i)trackers.push_back(defaults[i]);
+}
 struct Endpoint {
     U32 ip;int port;std::string id;bool visited;
     Endpoint():ip(0),port(0),visited(false){}
@@ -196,13 +207,13 @@ struct NuvioTorrent::Impl {
     std::vector<std::string> trackers;
     std::vector<Endpoint> peers;
     __int64 position,fileOffset,fileSize,totalSize;
-    int pieceLength,selectedFile,peerIndex,metadataId;
-    bool choked;
+    int pieceLength,selectedFile,peerIndex,metadataId,nextPeer;
+    bool choked,supportsExtension;
     unsigned clock;
     struct Cache {int piece;unsigned age;std::vector<unsigned char> bytes;Cache():piece(-1),age(0){}};
     Cache cache[2];
     Impl():quit(0),phase(0),peer(INVALID_SOCKET),control(INVALID_SOCKET),position(0),fileOffset(0),
-        fileSize(0),totalSize(0),pieceLength(0),selectedFile(-1),peerIndex(-1),metadataId(0),choked(true),clock(0) {
+        fileSize(0),totalSize(0),pieceLength(0),selectedFile(-1),peerIndex(-1),metadataId(0),nextPeer(0),choked(true),supportsExtension(false),clock(0) {
         InitializeCriticalSection(&lock);
     }
     ~Impl(){Close(peer);Close(control);DeleteCriticalSection(&lock);}
@@ -286,11 +297,11 @@ struct NuvioTorrent::Impl {
         }
         return !peers.empty();
     }
-    void Dht() {
+    void Dht(size_t targetPeers) {
         phase=1;std::vector<Endpoint> nodes;
         const char *hosts[]={"dht.transmissionbt.com","router.bittorrent.com","dht.libtorrent.org"};
         for(int i=0;i<3&&!quit;++i){Endpoint e;if(Resolve(hosts[i],e.ip)){e.port=i==2?25401:6881;nodes.push_back(e);}}
-        for(int query=0;query<24&&!quit&&peers.size()<16;++query) {
+        for(int query=0;query<32&&!quit&&peers.size()<targetPeers;++query) {
             int best=-1;
             for(size_t i=0;i<nodes.size();++i)if(!nodes[i].visited) {
                 if(best<0||nodes[i].id.empty())best=(int)i;
@@ -335,7 +346,7 @@ struct NuvioTorrent::Impl {
         }return false;
     }
     bool ConnectPeer(int index) {
-        Close(peer);Set(peer,NewSocket(SOCK_STREAM));peerIndex=-1;metadataId=0;choked=true;bitfield.clear();
+        Close(peer);Set(peer,NewSocket(SOCK_STREAM));peerIndex=-1;metadataId=0;choked=true;supportsExtension=false;bitfield.clear();
         if(peer==INVALID_SOCKET||index<0||index>=(int)peers.size())return false;
         sockaddr_in address=Address(peers[index]);int result=connect(peer,(sockaddr*)&address,sizeof(address));
         if(result==SOCKET_ERROR&&WSAGetLastError()!=WSAEWOULDBLOCK&&WSAGetLastError()!=WSAEINPROGRESS)return false;
@@ -349,18 +360,20 @@ struct NuvioTorrent::Impl {
         if(!Send(peer,handshake.data(),68,deadline)||!Receive(peer,response,68,deadline)||
             (unsigned char)response[0]!=19||std::memcmp(response+1,"BitTorrent protocol",19)||std::memcmp(response+28,hash.data(),20))return false;
         peerIndex=index;
-        if(response[25]&0x10) {
+        supportsExtension=(response[25]&0x10)!=0;
+        if(supportsExtension) {
             std::string ext(1,0);ext+="d1:md11:ut_metadatai1ee1:v8:Nuvio360e";
             if(!Message(20,ext,deadline))return false;
         }
         return true;
     }
-    bool Metadata() {
+    bool Metadata(size_t firstPeer) {
         phase=2;
         DWORD totalDeadline=GetTickCount()+45000;
-        for(size_t p=0;p<peers.size()&&p<8&&!quit&&(LONG)(totalDeadline-GetTickCount())>0;++p) {
-            if(!ConnectPeer((int)p))continue;
-            DWORD deadline=GetTickCount()+10000;
+        for(size_t p=firstPeer;p<peers.size()&&!quit&&(LONG)(totalDeadline-GetTickCount())>0;++p) {
+            if(!ConnectPeer((int)p)||!supportsExtension)continue;
+            DWORD deadline=GetTickCount()+8000;
+            if((LONG)(deadline-totalDeadline)>0)deadline=totalDeadline;
             int metadataSize=0;
             while(!quit&&!metadataId&&(LONG)(deadline-GetTickCount())>0) {
                 int id;std::string payload;
@@ -397,7 +410,7 @@ struct NuvioTorrent::Impl {
                 metadata.swap(collected);return true;
             }
         }
-        return Fail(quit?"Torrent cancelado.":"Nao foi possivel obter metadados de peers compativeis.");
+        return false; // Caller can discover and retry new peers before reporting error.
     }
     bool FileInfo() {
         Value info;if(!Parser(metadata).Parse(info)||info.type!='d')return Fail("Metadados torrent invalidos.");
@@ -414,8 +427,12 @@ struct NuvioTorrent::Impl {
                 const Value &path=file.Get("path.utf-8").type=='l'?file.Get("path.utf-8"):file.Get("path");
                 std::string filename=path.list.empty()?"video":path.list.back().text;
                 std::string lower=filename;for(size_t c=0;c<lower.size();++c)if(lower[c]>='A'&&lower[c]<='Z')lower[c]+='a'-'A';
-                bool video=lower.find(".mp4")!=std::string::npos||lower.find(".mkv")!=std::string::npos||
-                    lower.find(".avi")!=std::string::npos||lower.find(".wmv")!=std::string::npos;
+                bool video=false;
+                const char *ext[]={".mp4",".mkv",".avi",".wmv",".m4v",".mov",".mpg",".mpeg",".ts",".m2ts",".webm"};
+                for(size_t e=0;e<sizeof(ext)/sizeof(ext[0]);++e) {
+                    size_t n=std::strlen(ext[e]);
+                    if(lower.size()>=n&&lower.compare(lower.size()-n,n,ext[e])==0){video=true;break;}
+                }
                 if((selectedFile>=0&&(int)i==selectedFile)||(selectedFile<0&&video&&size>largest)) {
                     fileOffset=totalSize;fileSize=size;name=filename;largest=size;
                 }
@@ -468,18 +485,17 @@ struct NuvioTorrent::Impl {
         for(int i=0;i<2;++i)if(cache[i].piece==piece){cache[i].age=++clock;return &cache[i];}
         int slot=cache[0].piece<0?0:cache[1].piece<0?1:cache[0].age<cache[1].age?0:1;
         Cache &item=cache[slot];item.piece=-1;phase=4;
-        for(int attempt=0;attempt<8&&!quit;++attempt) {
+        const int attempts=(std::min)(16,(int)peers.size()+1);
+        for(int attempt=0;attempt<attempts&&!quit;++attempt) {
             if(peerIndex<0) {
                 if(peers.empty())break;
-                int candidate=attempt%(int)peers.size();
+                int candidate=nextPeer++%(int)peers.size();
                 if(!ConnectPeer(candidate))continue;
             }
             if((!choked||Interested())&&Download(piece,item.bytes)) {
                 item.piece=piece;item.age=++clock;phase=5;return &item;
             }
-            int next=peerIndex<0?attempt:peerIndex+1;
             Close(peer);peerIndex=-1;
-            if(!peers.empty())ConnectPeer(next%(int)peers.size());
         }
         Fail(quit?"Torrent cancelado.":"Peers indisponiveis ou parte do torrent sem verificacao valida.");
         return NULL;
@@ -504,7 +520,9 @@ struct NuvioTorrent::Impl {
             }
             at=end+1;
         }
-        return hash.size()==20||Fail("Somente magnet BitTorrent v1 e suportado.");
+        if(hash.size()!=20)return Fail("Somente magnet BitTorrent v1 e suportado.");
+        AddFallbackTrackers(trackers);
+        return true;
     }
 };
 
@@ -514,10 +532,24 @@ bool NuvioTorrent::Open(const std::string &magnet,std::string &error) {
     if(!m->Magnet(magnet)){error=m->error;return false;}
     unsigned char random[20];Random(random,20);m->peerId.assign((char*)random,20);m->peerId.replace(0,8,"-NV3601-");
     m->phase=1;
-    for(size_t i=0;i<m->trackers.size()&&!m->quit&&m->peers.empty();++i)m->Tracker(m->trackers[i]);
-    if(m->peers.empty()&&!m->quit)m->Dht();
-    if(m->peers.empty())m->Fail(m->quit?"Torrent cancelado.":"Nenhum peer encontrado. Verifique trackers, DHT e seeders.");
-    if(m->peers.empty()||!m->Metadata()||!m->FileInfo()){error=m->error;return false;}
+    // Collect peers from multiple trackers: the first can contain only peers
+    // that use uTP, encryption or lack ut_metadata support.
+    for(size_t i=0;i<m->trackers.size()&&i<8&&!m->quit&&m->peers.size()<24;++i)
+        m->Tracker(m->trackers[i]);
+    if(m->peers.size()<8&&!m->quit)m->Dht(24);
+    bool ready=!m->peers.empty()&&m->Metadata(0);
+    if(!ready&&!m->quit) {
+        size_t firstNew=m->peers.size();
+        m->Dht(64);
+        if(m->peers.size()>firstNew)ready=m->Metadata(firstNew);
+    }
+    if(!ready) {
+        m->Fail(m->quit?"Torrent cancelado.":m->peers.empty()?
+            "Nenhum peer encontrado. Verifique trackers, DHT e seeders.":
+            "Nao foi possivel obter metadados de peers TCP com ut_metadata.");
+        error=m->error;return false;
+    }
+    if(!m->FileInfo()){error=m->error;return false;}
     return true;
 }
 int NuvioTorrent::Read(unsigned char *bytes,int count) {
