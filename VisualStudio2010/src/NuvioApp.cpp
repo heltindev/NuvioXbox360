@@ -375,6 +375,8 @@ int NuvioProfileSelect(NuvioState *state)
                  state->profiles[state->profileIndex].name);
         state->screen = NUVIO_SCREEN_LOGIN; // so OpenScreen accepts the target below
         NuvioOpenScreen(state, NUVIO_SCREEN_HOME);
+        // A finished profile switch must not leave Settings as a stale back target.
+        state->previousScreen=NUVIO_SCREEN_HOME;
         return 1;
     }
     if (state->cloudProfiles) return 0;
