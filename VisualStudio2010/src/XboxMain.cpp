@@ -69,6 +69,75 @@ static inline D3DCOLOR Color(int r, int g, int b, int a = 255) {
     return D3DCOLOR_ARGB(a, r, g, b);
 }
 
+// Xbox face buttons use their standard colors even with the ASCII-only atlas.
+static D3DCOLOR PadColor(char b) {
+    if(b=='A')return Color(66,178,77);
+    if(b=='B')return Color(215,58,64);
+    if(b=='X')return Color(46,137,211);
+    if(b=='Y')return Color(235,188,44);
+    return TEXT_DIM;
+}
+static bool PadButton(char b) {return b=='A'||b=='B'||b=='X'||b=='Y';}
+static void DrawPadHint(NuvioGraphics &g,float x,float y,char button,const char *label) {
+    g.Circle(x+12,y+13,13,Color(14,14,14));
+    g.Circle(x+12,y+12,11,PadColor(button));
+    char letter[2]={button,0};
+    g.Text(x+6,y+4,15,letter,TEXT_WHITE);
+    g.Text(x+31,y+4,16,label,TEXT_MUTED,230);
+}
+static void DrawControllerFooter(NuvioGraphics &g,float x,float y,const char *hints) {
+    const char *p=hints;
+    while(*p&&x<SCREEN_WIDTH-45) {
+        while(*p==' ')++p;
+        if(!*p)break;
+        const char *next=std::strstr(p,"  ");
+        size_t n=next?(size_t)(next-p):std::strlen(p);
+        char part[128];if(n>=sizeof(part))n=sizeof(part)-1;
+        std::memcpy(part,p,n);part[n]=0;
+        if(n>2&&part[1]==':'&&PadButton(part[0])) {
+            DrawPadHint(g,x,y,part[0],part+2);
+            x+=31+(float)std::strlen(part+2)*8.3f+20;
+        } else {
+            g.Text(x,y+4,16,part,TEXT_DIM,SCREEN_WIDTH-x-12);
+            x+=(float)n*8.3f+20;
+        }
+        p=next?next+2:p+std::strlen(p);
+    }
+}
+// Language is inferred only from addon metadata; unknown languages stay neutral.
+static void DrawLanguageFlag(NuvioGraphics &g,float x,float y,const char *country) {
+    g.RoundedRect(x-2,y-2,54,34,6,Color(74,74,74));
+    g.Rect(x,y,50,30,Color(51,51,51));
+    if(!std::strcmp(country,"BR")) {
+        g.Rect(x,y,50,30,Color(24,145,61));
+        g.Rect(x+10,y+6,30,18,Color(247,204,48));
+        g.Circle(x+25,y+15,8,Color(37,83,181));
+    } else if(!std::strcmp(country,"US")) {
+        g.Rect(x,y,50,30,Color(250,250,250));
+        for(int i=0;i<7;++i)g.Rect(x,y+i*4.3f,50,2.4f,Color(196,47,54));
+        g.Rect(x,y,23,16,Color(47,65,140));
+    } else if(!std::strcmp(country,"ES")) {
+        g.Rect(x,y,50,30,Color(183,32,47));g.Rect(x,y+8,50,14,Color(255,201,43));
+    } else if(!std::strcmp(country,"JP")) {
+        g.Rect(x,y,50,30,Color(250,250,250));g.Circle(x+25,y+15,9,Color(188,30,63));
+    } else if(!std::strcmp(country,"FR")||!std::strcmp(country,"IT")) {
+        const bool it=country[0]=='I';
+        g.Rect(x,y,17,30,it?Color(11,143,86):Color(38,59,149));
+        g.Rect(x+17,y,16,30,Color(250,250,250));
+        g.Rect(x+33,y,17,30,it?Color(205,42,52):Color(228,51,62));
+    } else if(!std::strcmp(country,"DE")) {
+        g.Rect(x,y,50,10,Color(15,15,15));
+        g.Rect(x,y+10,50,10,Color(211,36,42));
+        g.Rect(x,y+20,50,10,Color(248,202,44));
+    } else if(!std::strcmp(country,"PT")) {
+        g.Rect(x,y,21,30,Color(22,111,73));g.Rect(x+21,y,29,30,Color(202,43,51));
+        g.Circle(x+21,y+15,7,Color(234,198,54));
+    } else if(!std::strcmp(country,"KR")) {
+        g.Rect(x,y,50,30,Color(250,250,250));g.Circle(x+25,y+13,8,Color(207,46,61));
+        g.Rect(x+17,y+15,16,7,Color(38,76,168));
+    } else g.Text(x+13,y+5,17,"--",TEXT_MUTED);
+}
+
 // Shared data (kept off the stack: the catalog alone is ~150 KB)
 static NuvioCatalog g_catalog;
 static FFPlayer *g_player=NULL;
@@ -412,7 +481,7 @@ static void DrawQrLoginScreen(NuvioGraphics &g, const NuvioState &state) {
     }
 
     // Bottom hint
-    g.Text(44, SCREEN_HEIGHT - 40, 17, "A: Retry     B: Back", TEXT_DIM);
+    DrawControllerFooter(g,44,SCREEN_HEIGHT-40,"A: Retry     B: Back");
     g.Text(1150, SCREEN_HEIGHT - 40, 12, "v0.9", TEXT_DIM);
 }
 
@@ -449,7 +518,7 @@ static void DrawLoginScreen(NuvioGraphics &g, const NuvioState &state, bool onli
         }
     }
     g.Text(90, SCREEN_HEIGHT - 36, 13, "NUVIO", TEXT_DIM);
-    g.Text(735, SCREEN_HEIGHT - 40, 16, "A: Connect    B: Back", TEXT_DIM);
+    DrawControllerFooter(g,735,SCREEN_HEIGHT-40,"A: Connect    B: Back");
 }
 
 // ============ PROFILE SELECTION ============
@@ -494,8 +563,7 @@ static void DrawProfileScreen(NuvioGraphics &g, const NuvioState &state, bool on
     }
 
     DrawStatusLine(g, 624);
-    g.Text(40, SCREEN_HEIGHT - 40, 16,
-           "Left/Right: Choose    A: Select    X: Remove profile    B: Back", TEXT_DIM);
+    DrawControllerFooter(g,40,SCREEN_HEIGHT-40,"Left/Right: Choose    A: Select    X: Remove profile    B: Back");
 }
 
 // ============ VIRTUAL KEYBOARD ============
@@ -578,8 +646,7 @@ static void DrawCreateProfileScreen(NuvioGraphics &g, const NuvioState &state) {
 
     DrawKeyboard(g, state, 262);
     DrawStatusLine(g, 645);
-    g.Text(110, SCREEN_HEIGHT - 36, 16,
-           "A: Type    X: Delete    Y: Space    LB/RB: Shift    Start: Create    B: Cancel", TEXT_DIM);
+    DrawControllerFooter(g,110,SCREEN_HEIGHT-36,"A: Type    X: Delete    Y: Space    LB/RB: Shift    Start: Create    B: Cancel");
 }
 
 // ============ SIDEBAR ============
@@ -702,7 +769,7 @@ static void DrawDiscoverScreen(NuvioGraphics &g,const NuvioState &state,const Nu
     const char *filters[3]={"Filmes","Series","Todos"};
     for(int i=0;i<3;++i) {g.RoundedRect(112+i*146.0f,82,132,36,10,state.catalogMode==i?TEXT_WHITE:BG_CARD);
         g.Text(128+i*146.0f,89,17,filters[i],state.catalogMode==i?BG_DARK:TEXT_MUTED);}
-    g.Text(550,91,15,"Y: trocar filtro    Start: buscar",TEXT_DIM);
+    DrawControllerFooter(g,550,87,"Y: trocar filtro    Start: buscar");
     const int top=(state.selectedRow/2)*2;
     for(int r=0;r<2;++r)for(int c=0;c<5;++c) {
         int index=DiscoverItem(state,catalog,(top+r)*5+c);
@@ -812,7 +879,7 @@ static void DrawSearchScreen(NuvioGraphics &g, const NuvioState &state, bool onl
         DrawRowSection(g, g_catalog, state, r, rail.name, rail.start, rail.count, 245);
     } else g.Text(110, 220, 24, g_catalogLoading ? "Searching addons..." : "No search results", TEXT_MUTED);
     DrawStatusLine(g, 642);
-    g.Text(110, 685, 16, state.searchActive ? "A: Key   X: Delete   Y: Space   Start: Search   B: Back" : "A: Details   B: Edit search   X: Refresh", TEXT_DIM);
+    DrawControllerFooter(g,110,681,state.searchActive ? "A: Key   X: Delete   Y: Space   Start: Search   B: Back" : "A: Details   B: Edit search   X: Refresh");
 }
 
 // ============ LIBRARY SCREEN ============
@@ -829,7 +896,7 @@ static void DrawLibraryScreen(NuvioGraphics &g, const NuvioState &state, bool on
         DrawRowSection(g, g_catalog, state, r, rail.name, rail.start, rail.count, 200);
     } else g.Text(110, 180, 24, g_catalogLoading ? "Loading library..." : "No items saved to this profile", TEXT_MUTED);
     DrawStatusLine(g, 642);
-    g.Text(110, 685, 16, "A: Details   X: Refresh   B: Profiles", TEXT_DIM);
+    DrawControllerFooter(g,110,681,"A: Details   X: Refresh   B: Profiles");
 }
 
 // ============ SETTINGS SCREEN ============
@@ -881,7 +948,7 @@ static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool o
     g.Text(704, 316, 14, "Player nativo FFmpeg / XAudio2 (ate 720p)", TEXT_DIM);
 
     DrawStatusLine(g, 646);
-    g.Text(110, SCREEN_HEIGHT - 36, 16, "Up/Down: Choose    A: Open    B: Home    Y: Sign out", TEXT_DIM);
+    DrawControllerFooter(g,110,SCREEN_HEIGHT-36,"Up/Down: Choose    A: Open    B: Home    Y: Sign out");
 }
 
 // ============ STREAMING P2P SETTINGS ============
@@ -911,7 +978,7 @@ static void DrawP2PSettingsScreen(NuvioGraphics &g,const NuvioState &state,bool 
         } else g.Text(x+w-88,y+37,26,"A",TEXT_WHITE);
     }
     DrawStatusLine(g,638);
-    g.Text(110,685,17,"Up/Down: escolher    A: alternar/limpar    B: voltar",TEXT_DIM);
+    DrawControllerFooter(g,110,681,"Up/Down: escolher    A: alternar/limpar    B: voltar");
 }
 
 // ============ PLUGINS SCREEN ============
@@ -963,7 +1030,7 @@ static void DrawAddonsScreen(NuvioGraphics &g, const NuvioState &state, bool onl
     if (!g_addons.fromCloud)
         g.Text(110, 612, 18, "Not synchronized. Y: retry cloud sync.", Color(200, 180, 0));
     DrawStatusLine(g, 640);
-    g.Text(110, SCREEN_HEIGHT - 36, 16, "Up/Down: Choose    A: On/Off or Install    X: Remove    B: Back", TEXT_DIM);
+    DrawControllerFooter(g,110,SCREEN_HEIGHT-36,"Up/Down: Choose    A: On/Off or Install    X: Remove    B: Back");
 }
 
 // ============ INSTALL PLUGIN (URL) ============
@@ -975,8 +1042,7 @@ static void DrawAddAddonScreen(NuvioGraphics &g, const NuvioState &state) {
     DrawTextBox(g, 110, 108, SCREEN_WIDTH - 220, 56, state.textBuffer, "https://...");
     DrawKeyboard(g, state, 200);
     DrawStatusLine(g, 612);
-    g.Text(110, SCREEN_HEIGHT - 36, 16,
-           "A: Type    X: Delete    Y: Space    LB/RB: Shift    Start: Install    B: Cancel", TEXT_DIM);
+    DrawControllerFooter(g,110,SCREEN_HEIGHT-36,"A: Type    X: Delete    Y: Space    LB/RB: Shift    Start: Install    B: Cancel");
 }
 
 // ============ DETAILS SCREEN ============
@@ -1027,12 +1093,18 @@ static void DrawSourcesScreen(NuvioGraphics &g) {
         int i=top+n;
         g.RoundedRect(110,120+n*72,1050,62,10,i==g_sourceCursor ? BG_HOVER : BG_CARD);
         if (i==g_sourceCursor) g.Rect(110,120+n*72,4,62,TEXT_WHITE);
-        g.Text(130,136+n*72,18,g_sourceRows[i],TEXT_WHITE,1000);
+        const char *label=g_sourceRows[i];
+        char country[3]="--";
+        if(label[0]=='['&&label[3]==']'&&label[4]==' ') {
+            country[0]=label[1];country[1]=label[2];label+=5;
+        }
+        if(!g_episodePicker)DrawLanguageFlag(g,130,136+n*72,country);
+        g.Text(g_episodePicker?130:200,136+n*72,18,label,TEXT_WHITE,g_episodePicker?1000:920);
     }
-    g.Text(110,590,17,"Sources are queried directly from your enabled Nuvio cloud addons.",TEXT_MUTED);
-    if (!g_episodePicker) g.Text(110,620,17,"Escolha uma fonte H.264/AVC de ate 720p. A: reproduzir.",TEXT_MUTED);
+    g.Text(110,590,17,"Idioma informado pelo addon; -- = idioma nao identificado.",TEXT_MUTED);
+    if (!g_episodePicker) g.Text(110,620,17,"MP4/MKV/AVI podem tocar com codec disponivel no Xbox (ate 720p).",TEXT_MUTED);
     DrawStatusLine(g,650);
-    g.Text(110,685,16,"Up/Down: Choose   A: Open   X: Refresh   B: Back",TEXT_DIM);
+    DrawControllerFooter(g,110,681,"Up/Down: Choose   A: Open   X: Refresh   B: Back");
 }
 
 // ============ MAIN DRAW FUNCTION ============
