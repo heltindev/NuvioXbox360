@@ -595,6 +595,48 @@ static bool UnsupportedVideo(const picojson::value &stream) {
     return false;
 }
 
+// A language tag is optional in a stream addon; never guess a country if absent.
+static bool LanguageWord(const std::string &s, const char *word) {
+    size_t n=std::strlen(word),at=0;
+    while((at=s.find(word,at))!=std::string::npos) {
+        bool left=at==0||!((s[at-1]>='a'&&s[at-1]<='z')||(s[at-1]>='0'&&s[at-1]<='9'));
+        size_t end=at+n;
+        bool right=end==s.size()||!((s[end]>='a'&&s[end]<='z')||(s[end]>='0'&&s[end]<='9'));
+        if(left&&right)return true;
+        ++at;
+    }
+    return false;
+}
+static std::string SourceLanguageCountry(const picojson::value &stream) {
+    const picojson::value &hints=Field(stream,"behaviorHints");
+    std::string tag=AsString(Field(stream,"language"));
+    if(tag.empty())tag=AsString(Field(stream,"audioLanguage"));
+    if(tag.empty())tag=AsString(Field(hints,"language"));
+    const picojson::value *lists[]={&Field(stream,"audioLanguages"),&Field(stream,"languages"),&Field(hints,"audioLanguages")};
+    for(int i=0;i<3&&tag.empty();++i)if(lists[i]->is<picojson::array>()) {
+        const picojson::array &a=lists[i]->get<picojson::array>();
+        if(!a.empty())tag=AsString(a[0]);
+    }
+    const bool explicitTag=!tag.empty();
+    if(!explicitTag)tag=AsString(Field(stream,"name"))+" "+AsString(Field(stream,"title"));
+    for(size_t i=0;i<tag.size();++i)if(tag[i]>='A'&&tag[i]<='Z')tag[i]+='a'-'A';
+    if(LanguageWord(tag,"pt-br")||LanguageWord(tag,"pt_br")||LanguageWord(tag,"brazilian")||
+       LanguageWord(tag,"brasil")||LanguageWord(tag,"dublado"))return "BR";
+    if(LanguageWord(tag,"pt-pt"))return "PT";
+    if(LanguageWord(tag,"en-us")||LanguageWord(tag,"en")||LanguageWord(tag,"eng")||
+       LanguageWord(tag,"english"))return "US";
+    if(LanguageWord(tag,"es")||LanguageWord(tag,"esp")||LanguageWord(tag,"spanish")||
+       LanguageWord(tag,"espanol"))return "ES";
+    if(LanguageWord(tag,"ja")||LanguageWord(tag,"jpn")||LanguageWord(tag,"japanese"))return "JP";
+    if(LanguageWord(tag,"fr")||LanguageWord(tag,"fre")||LanguageWord(tag,"french"))return "FR";
+    if(LanguageWord(tag,"de")||LanguageWord(tag,"ger")||LanguageWord(tag,"german"))return "DE";
+    if(LanguageWord(tag,"ko")||LanguageWord(tag,"kor")||LanguageWord(tag,"korean"))return "KR";
+    if(LanguageWord(tag,"it")||LanguageWord(tag,"ita")||LanguageWord(tag,"italian"))return "IT";
+    if(LanguageWord(tag,"pt")||LanguageWord(tag,"por")||LanguageWord(tag,"portuguese")||
+       LanguageWord(tag,"portugues"))return "BR";
+    return "--";
+}
+
 static std::string Sources(const std::string &id, int episode) {
     s_sources.clear();
     Art *item = Artwork(id);
@@ -635,7 +677,7 @@ static std::string Sources(const std::string &id, int episode) {
             const std::string url = AsString(Field(stream, "url"));
             if (!torrent && url.empty() && AsString(Field(stream, "externalUrl")).empty()) continue;
             // Source URLs and provider keys remain off the television and logs.
-            out += SafeText(label, 50) + " | " + SafeText(desc, 85) +
+            out += "[" + SourceLanguageCountry(stream) + "] " + SafeText(label, 50) + " | " + SafeText(desc, 78) +
                 (UnsupportedVideo(stream)?" [Requer conversao para 720p H.264]":torrent ? " [Torrent]" : " [Video]") + "\n";
             ++count;
             s_sources.push_back(stream);
