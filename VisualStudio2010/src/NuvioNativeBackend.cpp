@@ -1088,6 +1088,11 @@ static std::string Preview(const std::string &id, bool bitmap) {
 bool NuvioNativePlaybackSource(int index,NuvioPlaybackSource *source) {
     if(!source || index<0 || index>=(int)s_sources.size())return false;
     const picojson::value &stream=s_sources[index];
+    const StreamCompat hint=StreamSupportHint(stream);
+    // DRM cannot be fixed by ordinary container remuxing or transcoding.
+    if(hint.support==STREAM_UNSUPPORTED && std::strcmp(hint.reason,"Protecao DRM")==0) {
+        Error("Stream protegido por DRM; escolha uma fonte sem protecao.");return false;
+    }
     source->url=AsString(Field(stream,"url"));
     source->name=AsString(Field(stream,"name"));
     source->headers.clear();source->prepareBody.clear();
