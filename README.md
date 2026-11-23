@@ -52,7 +52,7 @@ Escolha fontes **H.264/AVC ate 720p**, de preferencia com audio AAC estereo. A b
 
 Links HTTP/HTTPS dos addons entram diretamente no player, com cabecalhos do provedor, redirecionamentos limitados e HTTP Range.
 
-Fontes magnet/infoHash agora entram no cliente BitTorrent **dentro do XEX**, que busca peers por tracker UDP/HTTP ou DHT IPv4, obtem metadados por `ut_metadata`, verifica as partes e entrega os bytes ao FFmpeg. O indice `fileIdx` do addon seleciona o arquivo correto de um torrent com varios arquivos. Nao precisa de um processo rodando no PC para esse caminho.
+Fontes magnet/infoHash e `torrent://hash/fileIdx` agora entram no cliente BitTorrent **dentro do XEX**, que busca peers por tracker UDP/HTTP ou DHT IPv4, obtem metadados por `ut_metadata`, verifica as partes e entrega os bytes ao FFmpeg. O indice `fileIdx` do addon seleciona o arquivo correto de um torrent com varios arquivos. Nao precisa de um processo rodando no PC para esse caminho.
 
 Nesta revisao, o cliente consulta mais de um tracker, usa trackers publicos apenas quando o magnet nao fornece nenhum e tenta peers adicionais via DHT quando os primeiros nao oferecem metadados. O indice `fileIdx` continua selecionando o arquivo dentro do torrent.
 

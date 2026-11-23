@@ -628,7 +628,10 @@ static std::string Sources(const std::string &id, int episode) {
             const bool torrent = !AsString(Field(stream, "infoHash")).empty() ||
                 !AsString(Field(Field(stream,"clientResolve"),"infoHash")).empty() ||
                 !AsString(Field(Field(stream,"clientResolve"),"magnetUri")).empty() ||
-                AsString(Field(stream,"url")).find("magnet:")==0;
+                AsString(Field(stream,"url")).find("magnet:")==0 ||
+                AsString(Field(stream,"url")).find("torrent://")==0 ||
+                AsString(Field(stream,"externalUrl")).find("magnet:")==0 ||
+                AsString(Field(stream,"externalUrl")).find("torrent://")==0;
             const std::string url = AsString(Field(stream, "url"));
             if (!torrent && url.empty() && AsString(Field(stream, "externalUrl")).empty()) continue;
             // Source URLs and provider keys remain off the television and logs.
@@ -1025,7 +1028,33 @@ bool NuvioNativePlaybackSource(int index,NuvioPlaybackSource *source) {
     std::string hash=AsString(Field(stream,"infoHash"));
     if(hash.empty())hash=AsString(Field(resolve,"infoHash"));
     std::string magnet=AsString(Field(resolve,"magnetUri"));
-    if(source->url.find("magnet:")==0)magnet=source->url;
+    const std::string external=AsString(Field(stream,"externalUrl"));
+    if(source->url.find("magnet:?")==0)magnet=source->url;
+    else if(source->url.empty()&&external.find("magnet:?")==0)magnet=external;
+    // Nuvio streams may encode a v1 hash and zero-based file index as:
+    // torrent://<40-hex-or-32-base32-hash>/<fileIdx>
+    int torrentFileIndex=-1;
+    std::string torrentUri=source->url.find("torrent://")==0?source->url:source->url.empty()?external:"";
+    if(torrentUri.find("torrent://")==0) {
+        std::string path=torrentUri.substr(10);
+        size_t sep=path.find_first_of("/?");
+        std::string id=path.substr(0,sep);
+        bool valid=id.size()==40||id.size()==32;
+        for(size_t c=0;c<id.size()&&valid;++c) {
+            char x=id[c];
+            if(id.size()==40)valid=(x>='0'&&x<='9')||(x>='a'&&x<='f')||(x>='A'&&x<='F');
+            else valid=(x>='2'&&x<='7')||(x>='a'&&x<='z')||(x>='A'&&x<='Z');
+        }
+        if(!valid){Error("Hash torrent:// invalido.");return false;}
+        if(hash.empty())hash=id;
+        if(sep!=std::string::npos&&path[sep]=='/') {
+            std::string selected=path.substr(sep+1);
+            selected=selected.substr(0,selected.find('?'));
+            char *end=NULL;long idx=std::strtol(selected.c_str(),&end,10);
+            if(selected.empty()||*end||idx<0||idx>2047){Error("Indice torrent:// invalido.");return false;}
+            torrentFileIndex=(int)idx;
+        }
+    }
     if(magnet.empty()&&!hash.empty())magnet="magnet:?xt=urn:btih:"+hash;
     if(!magnet.empty()) {
         std::string server;
@@ -1045,6 +1074,7 @@ bool NuvioNativePlaybackSource(int index,NuvioPlaybackSource *source) {
             Error("Endereco torrent_server invalido em nuvio.cfg.");return false;
         }
         int file=AsInt(Field(stream,"fileIdx"),AsInt(Field(resolve,"fileIdx"),-1));
+        if(file<0)file=torrentFileIndex;
         const picojson::value *lists[]={&Field(stream,"sources"),&Field(resolve,"sources")};
         for(int l=0;l<2;++l)if(lists[l]->is<picojson::array>()) {
             const picojson::array &items=lists[l]->get<picojson::array>();
