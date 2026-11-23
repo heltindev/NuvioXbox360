@@ -1118,17 +1118,27 @@ static void DrawScreen(NuvioGraphics &g, const NuvioState &state,
         g_videoDevice->SetRenderState(D3DRS_VIEWPORTENABLE,TRUE);
         D3DRECT screen={0,0,1280,720};g_player->RenderFrame(screen);
         g.ResumeUI();
-        if(g_player->IsBuffering()) {
+        if(g_player->IsBuffering()&&!g_player->Failed()) {
             std::wstring wide=g_player->StatusText();std::string status(wide.begin(),wide.end());
             if(g_playingTorrent&&g_hideTorrentStats)status="Carregando video P2P...";
-            g.Text(40,32,24,status.c_str(),TEXT_WHITE,1180);
+            const int percent=g_player->StartupPercent();
+            g.RoundedRect(242,258,796,168,19,Color(12,12,12,230));
+            g.Text(282,284,28,"Preparando video",TEXT_WHITE);
+            char amount[24];std::sprintf(amount,"%d%%",percent);
+            g.Text(940,286,24,amount,ACCENT_GREEN);
+            g.RoundedRect(282,344,718,14,7,Color(65,65,65));
+            if(percent>0)g.RoundedRect(282,344,718.0f*percent/100.0f,14,7,ACCENT_GREEN);
+            g.Text(282,374,18,status.c_str(),TEXT_MUTED,716);
+            g.Text(282,402,14,"Buffer inicial; o torrent continua em streaming.",TEXT_DIM);
         }
         if(g_player->Failed())g.Text(40,90,18,g_player->Error().c_str(),TEXT_WHITE,1140);
         if(GetTickCount()-g_playerInputAt<4000||g_player->IsPaused()||g_player->Failed()) {
             g.Rect(0,655,1280,65,Color(0,0,0,210));
-            char status[140];std::sprintf(status,"%d:%02d / %d:%02d    A: %s    Left/Right: 10s    B: voltar",
-                (int)g_player->Position()/60,(int)g_player->Position()%60,(int)g_player->Duration()/60,(int)g_player->Duration()%60,
-                g_player->IsPaused()?"Continuar":"Pausar");g.Text(40,677,22,status,TEXT_WHITE,1200);
+            char time[64];std::sprintf(time,"%d:%02d / %d:%02d",
+                (int)g_player->Position()/60,(int)g_player->Position()%60,(int)g_player->Duration()/60,(int)g_player->Duration()%60);
+            g.Text(40,678,21,time,TEXT_WHITE,280);
+            DrawControllerFooter(g,365,675,g_player->IsPaused()?"A: Continuar    B: Voltar":"A: Pausar    B: Voltar");
+            g.Text(755,679,16,"Left/Right: 10s",TEXT_DIM);
         }
         g.End();return;
     }
