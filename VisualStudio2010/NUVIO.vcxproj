@@ -85,6 +85,7 @@
     <ClInclude Include="src\NuvioGraphics.h" />
     <ClInclude Include="src\NuvioInput.h" />
     <ClInclude Include="src\NuvioPlayback.h" />
+    <ClInclude Include="src\StreamCompat.h" />
     <ClInclude Include="src\NuvioNetwork.h" />
     <ClInclude Include="src\NuvioNativeBackend.h" />
     <ClInclude Include="src\NuvioUiAtlas.h" />
