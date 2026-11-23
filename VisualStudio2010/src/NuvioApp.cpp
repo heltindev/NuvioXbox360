@@ -6,11 +6,21 @@
 
 static NuvioScreen SidebarScreen(int index)
 {
-    static const NuvioScreen kScreens[5] = {
-        NUVIO_SCREEN_HOME, NUVIO_SCREEN_DISCOVER, NUVIO_SCREEN_SEARCH,
-        NUVIO_SCREEN_LIBRARY, NUVIO_SCREEN_SETTINGS
+    static const NuvioScreen kScreens[4] = {
+        NUVIO_SCREEN_HOME, NUVIO_SCREEN_SEARCH, NUVIO_SCREEN_LIBRARY,
+        NUVIO_SCREEN_SETTINGS
     };
-    return kScreens[index];
+    return index>=0&&index<4?kScreens[index]:NUVIO_SCREEN_HOME;
+}
+int NuvioSettingsItemCount(int category)
+{
+    static const int count[5]={3,2,2,2,2};
+    return category>=0&&category<5?count[category]:0;
+}
+bool NuvioSettingsItemEnabled(int category,int row)
+{
+    // Only implemented settings can be opened. Other entries are displayed dimmed.
+    return (category==0&&row==1)||(category==2&&(row==0||row==1));
 }
 
 static void CopyText(char *target, int length, const char *source)
@@ -64,15 +74,18 @@ void NuvioOpenScreen(NuvioState *state, NuvioScreen screen)
     state->selectedRow = 0;
     state->selectedColumn = 0;
     state->sidebarFocused = false;
-    if (screen == NUVIO_SCREEN_HOME) state->sidebarItem = 0;
-    if (screen == NUVIO_SCREEN_DISCOVER) state->sidebarItem = 1;
+    if (screen == NUVIO_SCREEN_HOME || screen == NUVIO_SCREEN_DISCOVER) state->sidebarItem = 0;
     if (screen == NUVIO_SCREEN_SEARCH) {
-        state->sidebarItem = 2;
+        state->sidebarItem = 1;
         state->searchActive = true;
         state->searchCursorPos = (int)std::strlen(state->searchQuery);
     }
-    if (screen == NUVIO_SCREEN_LIBRARY) state->sidebarItem = 3;
-    if (screen == NUVIO_SCREEN_SETTINGS) state->sidebarItem = 4;
+    if (screen == NUVIO_SCREEN_LIBRARY) state->sidebarItem = 2;
+    if (screen == NUVIO_SCREEN_SETTINGS) {
+        state->sidebarItem = 3;
+        state->settingsCategory=0;
+        state->settingsCategoriesFocused=true;
+    }
 }
 
 void NuvioMoveHorizontal(NuvioState *state, int direction)
@@ -82,6 +95,13 @@ void NuvioMoveHorizontal(NuvioState *state, int direction)
 
     if (state->sidebarFocused) {
         if (direction > 0) state->sidebarFocused = false;
+        return;
+    }
+    if (state->screen == NUVIO_SCREEN_SETTINGS) {
+        if (direction < 0) {
+            if (state->settingsCategoriesFocused) state->sidebarFocused=true;
+            else state->settingsCategoriesFocused=true;
+        } else state->settingsCategoriesFocused=false;
         return;
     }
     if (direction < 0) {
@@ -98,9 +118,18 @@ void NuvioMoveVertical(NuvioState *state, int direction, int rowCount)
 
     if (state->sidebarFocused) {
         state->sidebarItem += direction > 0 ? 1 : -1;
-        if (state->sidebarItem < 0) state->sidebarItem = 4;
-        if (state->sidebarItem > 4) state->sidebarItem = 0;
+        if (state->sidebarItem < 0) state->sidebarItem = 3;
+        if (state->sidebarItem > 3) state->sidebarItem = 0;
     } else {
+        if (state->screen == NUVIO_SCREEN_SETTINGS && state->settingsCategoriesFocused) {
+            state->settingsCategory+=direction>0?1:-1;
+            if(state->settingsCategory<0)state->settingsCategory=0;
+            if(state->settingsCategory>4)state->settingsCategory=4;
+            state->selectedRow=0;
+            return;
+        }
+        if (state->screen == NUVIO_SCREEN_SETTINGS)
+            rowCount=NuvioSettingsItemCount(state->settingsCategory);
         const int lastRow = rowCount > 0 ? rowCount - 1 : 0;
         state->selectedRow += direction > 0 ? 1 : -1;
         if (state->selectedRow < 0) state->selectedRow = 0;
@@ -128,16 +157,22 @@ void NuvioSelect(NuvioState *state, int catalogIndex)
         return;
     }
     if (state->screen == NUVIO_SCREEN_SETTINGS) {
-        if (state->selectedRow == 0) {
-            state->screen = NUVIO_SCREEN_ADDONS;
-            state->selectedRow = 0;
-            state->selectedColumn = 0;
-        } else if (state->selectedRow == 1) {
-            state->screen = NUVIO_SCREEN_PROFILE;
-            state->profileCursor = state->profileIndex;
-        } else if (state->selectedRow == 2) {
-            state->screen = NUVIO_SCREEN_P2P_SETTINGS;
-            state->selectedRow = 0;
+        if(state->settingsCategoriesFocused) {
+            state->settingsCategoriesFocused=false;
+            state->selectedRow=0;
+            return;
+        }
+        if(!NuvioSettingsItemEnabled(state->settingsCategory,state->selectedRow))return;
+        if(state->settingsCategory==0&&state->selectedRow==1) {
+            state->previousScreen=NUVIO_SCREEN_SETTINGS;
+            state->screen=NUVIO_SCREEN_PROFILE;
+            state->profileCursor=state->profileIndex;
+        } else if(state->settingsCategory==2&&state->selectedRow==0) {
+            state->screen=NUVIO_SCREEN_ADDONS;
+            state->selectedRow=0;state->selectedColumn=0;
+        } else if(state->settingsCategory==2&&state->selectedRow==1) {
+            state->screen=NUVIO_SCREEN_P2P_SETTINGS;
+            state->selectedRow=0;
         }
         return;
     }
@@ -165,8 +200,10 @@ void NuvioBack(NuvioState *state)
             break;
         case NUVIO_SCREEN_P2P_SETTINGS:
             state->screen = NUVIO_SCREEN_SETTINGS;
-            state->selectedRow = 2;
-            state->sidebarItem = 4;
+            state->settingsCategory=2;
+            state->settingsCategoriesFocused=false;
+            state->selectedRow = 1;
+            state->sidebarItem = 3;
             state->sidebarFocused = false;
             break;
         case NUVIO_SCREEN_SETTINGS:
@@ -177,7 +214,9 @@ void NuvioBack(NuvioState *state)
             break;
         case NUVIO_SCREEN_ADDONS:
             state->screen = NUVIO_SCREEN_SETTINGS;
-            state->sidebarItem = 4;
+            state->settingsCategory=2;
+            state->settingsCategoriesFocused=false;
+            state->sidebarItem = 3;
             state->selectedRow = 0;
             state->sidebarFocused = false;
             break;
@@ -191,8 +230,15 @@ void NuvioBack(NuvioState *state)
             state->screen = state->createReturn;
             break;
         case NUVIO_SCREEN_PROFILE:
-            state->screen = NUVIO_SCREEN_LOGIN;
-            state->loginCursor = 0;
+            if(state->previousScreen==NUVIO_SCREEN_SETTINGS) {
+                state->screen=NUVIO_SCREEN_SETTINGS;
+                state->settingsCategory=0;
+                state->settingsCategoriesFocused=false;
+                state->selectedRow=1;state->sidebarItem=3;
+            } else {
+                state->screen = NUVIO_SCREEN_LOGIN;
+                state->loginCursor = 0;
+            }
             break;
         default:
             state->screen = NUVIO_SCREEN_PROFILE;
