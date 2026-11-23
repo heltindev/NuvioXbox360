@@ -989,7 +989,7 @@ static std::string Image(const std::string &url, int width, int height, bool rou
     if (url.find("https://image.tmdb.org/t/p/")==0) {
         const size_t begin=27, slash=url.find('/',begin);
         if (slash!=std::string::npos)
-            resized=url.substr(0,begin)+(width>400?"w780":"w185")+url.substr(slash);
+            resized=url.substr(0,begin)+(width>800?"w1280":width>185?"w342":"w185")+url.substr(slash);
     }
     const Http::Response result = Http::Get(resized, "User-Agent: NUVIO\r\n", 4500);
     if (result.status != 200 || result.body.empty() || result.body.size() > 1500000) return "";
@@ -1005,16 +1005,33 @@ static std::string Image(const std::string &url, int width, int height, bool rou
     data[4] = (char)width; data[5] = (char)(width >> 8);
     data[6] = (char)height; data[7] = (char)(height >> 8);
     unsigned char *dst = (unsigned char*)&data[8];
+    // Bilinear filtering prevents visibly blocky posters and hero backdrops.
+    // 8-bit fixed-point weights keep this compatible with the Xbox 360 XDK.
     for (int y = 0; y < height; ++y) {
-        const int sy = (y * ih) / height;
+        int py=((2*y+1)*ih*128)/height-128;
+        if(py<0)py=0;
+        int y0=py>>8,wy=py&255;
+        if(y0>=ih-1){y0=ih-1;wy=0;}
+        const int y1=y0+1<ih?y0+1:y0;
         for (int x = 0; x < width; ++x) {
-            const int sx = (x * iw) / width;
-            std::memcpy(dst + (y * width + x) * 4, rgba + (sy * iw + sx) * 4, 4);
+            int px=((2*x+1)*iw*128)/width-128;
+            if(px<0)px=0;
+            int x0=px>>8,wx=px&255;
+            if(x0>=iw-1){x0=iw-1;wx=0;}
+            const int x1=x0+1<iw?x0+1:x0;
+            const unsigned char *p00=rgba+(y0*iw+x0)*4;
+            const unsigned char *p10=rgba+(y0*iw+x1)*4;
+            const unsigned char *p01=rgba+(y1*iw+x0)*4;
+            const unsigned char *p11=rgba+(y1*iw+x1)*4;
+            const int w00=(256-wx)*(256-wy),w10=wx*(256-wy);
+            const int w01=(256-wx)*wy,w11=wx*wy;
+            unsigned char *pixel=dst+(y*width+x)*4;
+            for(int c=0;c<4;++c)
+                pixel[c]=(unsigned char)((p00[c]*w00+p10[c]*w10+p01[c]*w01+p11[c]*w11+32768)>>16);
             if (roundAvatar) {
                 const int dx = 2 * x + 1 - width;
                 const int dy = 2 * y + 1 - height;
-                if (dx * dx + dy * dy > width * width)
-                    dst[(y * width + x) * 4 + 3] = 0;
+                if (dx * dx + dy * dy > width * width) pixel[3] = 0;
             }
         }
     }
@@ -1032,7 +1049,7 @@ static std::string Preview(const std::string &id, bool bitmap) {
     const std::string url = AddonUrl(a->base, "/meta/" + a->kind + "/" + Encode(id) + ".json");
     if(a->metadata.is<picojson::object>())metadata=a->metadata;
     else if (!HttpJson(url, metadata)) {
-        if (bitmap) return Image(a->background, 640, 360, false);
+        if (bitmap) return Image(a->background, 960, 540, false);
         return "\n\n\n" + SafeText(a->description, 380) + "\n";
     }
     a->metadata=metadata;
@@ -1040,7 +1057,7 @@ static std::string Preview(const std::string &id, bool bitmap) {
     if (bitmap) {
         std::string background = AsString(Field(m, "background"));
         if (background.empty()) background = a->background;
-        return Image(background, 640, 360, false);
+        return Image(background, 960, 540, false);
     }
     std::string genres;
     const picojson::value &g = Field(m, "genres").is<picojson::array>()?Field(m,"genres"):Field(m, "genre");
@@ -1301,7 +1318,7 @@ bool NuvioNativeGet(const char *path, int maxBody, NuvioHttpData *out) {
     else if (p.find("/search.tsv?q=") == 0) body = Catalog(0, Decode(p.substr(14)));
     else if (p.find("/poster/") == 0 && p.find(".rgba") != std::string::npos) {
         Art *a = Artwork(p.substr(8, p.size() - 13));
-        if (a) body = Image(a->poster, 160, 240, false);
+        if (a) body = Image(a->poster, 192, 288, false);
     }
     else if (p.find("/preview/") == 0 && p.size() > 17) {
         const bool bitmap = p.find(".rgba") != std::string::npos;
