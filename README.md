@@ -103,6 +103,30 @@ Nao existe servidor publico predefinido. Uma fonte 4K/H.265 continua exigindo co
 
 O player foi executado no Xenia Canary com um arquivo de teste H.264 854x480/AAC 48 kHz estereo: 52 quadros decodificados, 48 exibidos, zero descartados no teste curto. O novo cliente torrent passou no Windows com tracker UDP e peer TCP controlados: arquivo completo de 4.372.373 bytes, verificacao de partes, busca e recusa de dados corrompidos. Esse teste e separado do teste anterior de arquivo local no Xenia. Navegacao, entrada analogica, autenticacao, addons e selecao de fontes possuem testes locais. Isso nao comprova todos os codecs, provedores nem desempenho do Xbox fisico. Veja [docs/VALIDATION.md](docs/VALIDATION.md).
 
+## Corrigir C1083 mbedtls/ssl.h e LNK1181 video.lib
+
+Se o VS2010 mostrar `fatal error C1083: mbedtls/ssl.h` e/ou
+`LNK1181: cannot open input file 'video.lib'`, nao e um erro
+dos quatro icones ou do player: a copia ZIP ainda nao tem todas
+as bibliotecas de terceiros instaladas e compiladas.
+
+Baixe a versao atual deste branch, abra PowerShell no diretorio
+`VisualStudio2010` (com VS2010 e Xbox 360 XDK instalados) e execute:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\prepare_release.ps1
+```
+
+O script restaura as fontes fixadas de FFmpeg e mbedTLS **sem sobrescrever
+modificacoes locais**, compila mbedTLS/HTTPS, zlib/FFmpeg, guard/video,
+depois recompila `NUVIO.sln` em `Release | Xbox 360`. Ao fim ele
+verifica a existencia de `bin\Release\NUVIO.xex` e exibe a data do arquivo.
+Requer conexao com a internet para baixar as dependencias ausentes.
+Nao copie um XEX antigo caso o script apresente erro.
+
+Avisos `C4244` sao conversoes numericas e nao impedem a compilacao;
+`C1083` e `LNK1181` sao erros fatais que impedem a geracao do XEX.
+
 ## Compilacao
 
 Abra `VisualStudio2010/NUVIO.sln` no VS2010 com XDK e selecione Release | Xbox 360. `build_decoder.ps1` compila as dependencias do decoder e `build_native_tls.ps1` compila HTTPS/TLS quando necessario. Preserve ThirdParty e suas licencas.
