@@ -15,7 +15,7 @@ relative path fallback). This folder must be writable. Writes use a temporary
 file and replace the old file only after a successful write/flush/close. The
 cache contains the refresh token and email, **not** a password, access token or
 QR nonce. It is local plaintext account data: exclude it from uploads, shared
-packages and source control. Y in Settings signs out and deletes this cache.
+packages and source control. Settings > You > Account > Sign out deletes this cache and opens a fresh QR. Y in Settings opens Account.
 An Android private app directory is not available for an unsigned homebrew XEX;
 this port does not claim hardware-backed or encrypted credential storage.
 

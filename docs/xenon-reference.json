@@ -1,0 +1,19 @@
+{
+  "inventory": {
+    "reference_files": 2976,
+    "identical": 155,
+    "different": 1008,
+    "not_in_current": 1813
+  },
+  "reference_files": {
+    "README.md": "305e7afed05a019afdc62e1c92e7e55052ba99ca0bb5336c18b758880b6fea48",
+    "BUILDING.md": "33c9953ac6ce394bb545d68db78d1c3b08d49bac2b80841c6b07cdd82760fca3",
+    "NOTICE.md": "b1dfb970c8d8222bd7d439405e1e970456abceaab7839c99cecaf9c4053feebb",
+    "docs/DECODER-NOTES.md": "3a4e046215ece0ce560b9af1b4581be3c6a397da73eaf3d39111892d040ef044",
+    "docs/low-latency-flags.md": "3e194d5646613204014a795482c5977c78c6b4669f96e55973e533bf4674ae31",
+    "libavcodec/ppc/h264_altivec.c": "b41cb8278bfd895889036d2faa3bf75be013e492de86d6a85dfcc4b93455a114",
+    "libavcodec/ppc/h264_qpel8_xenon.h": "0ca4d30358714a5cd07a62d4c5ddd259e420fe426ce751fc45087c4cc8534ab0",
+    "verify/vmxaudit.py": "55d90809862daf5b7aee6e487a85f47b5bd1a859c9554f75c0eef7173bb8806a",
+    "verify/harness.c": "1139e468500a606308313fa914844901addab127bec55a66cbb9a7eb1019d68f"
+  }
+}

@@ -1,40 +1,53 @@
-# NUVIO v0.1.0-alpha.2
+# NUVIO v0.1.0-alpha.2 — Xbox UI8 experimental pre-release
 
-Experimental pre-release for Xbox 360 RGH/JTAG. Physical console startup and end-to-end playback have not been verified. This build is intended for testing.
+**Known failure: the maintainer still gets an error and the video does not load.**
+This version is for development testing. It is not a stable or completed media
+player. End-to-end playback remains open in [issue #4](https://github.com/heltindev/NuvioXbox360/issues/4).
 
 ## Changes
 
-- Larger sidebar buttons and labels when focused; left-stick and D-pad navigation.
-- Small artwork cache and background network jobs to reduce Xbox RAM use.
-- Native FFmpeg video, YUV rendering and XAudio2 stereo audio integration, limited to 720p.
-- Experimental native BitTorrent v1 metadata retrieval, tracker/DHT discovery, SHA-1 piece verification, small cache and multi-file selection.
-- More reliable HTTP playback: redirects, validated byte ranges, and detection of incomplete or malformed responses.
-- Optional authenticated Python/FFmpeg conversion service. HTTP sources can be prepared as H.264 Main 3.1, up to 720p/24 fps, SDR BT.709, with AAC stereo 48 kHz. PQ/HLG HDR uses tone mapping.
-- Conversion job preparation runs on the player worker. The UI shows conversion status and allows returning with B.
-- Source code synchronized with the compiled application, with pinned dependency restoration and license notices.
+- Search keyboard accepts input during artwork/catalog loading and displays live
+  edited text. Old deferred input is discarded on screen changes.
+- Account status/email page and explicit Sign out button, followed by a fresh QR.
+- Split purple login layout, scannable white QR background and corrected Settings icons.
+- Four sidebar items, rounded cards/focus and visible details actions.
+- Session catalog/image caches, add-on search handling and serialized backend requests.
+- Experimental native torrent metadata retries and bounded SHA-1-verified pieces.
+- H.264 Xenon weighted-prediction adaptation with C fallback, intrinsic restrictions,
+  opcode auditing and improved decoder failure reporting.
+- English repository documentation, explicit known-issue list and source/dependency notices.
 
-## Development validation
+## What is still missing
 
-- Navigation, analog input, authentication and cloud add-on tests passed.
-- Native torrent client passed controlled Windows tests: a complete 4.37 MB sample, metadata and piece verification, seeks, multi-file selection and rejection of corrupted data.
-- Production HTTP transport passed Windows socket tests for MP4 bytes, redirects, chunks, ranges and truncated downloads. HTTPS is not covered by that host test.
-- The conversion service passed real HTTP tests using synthetic 1080p HEVC and 10-bit HDR sources. FFprobe verified H.264 <=720p, SDR, AAC stereo and matching audio/video durations.
-- An earlier native decoder smoke test played an open H.264/AAC local file in Xenia. The latest end-to-end network/player build has not completed an emulator or physical-console test.
+- Fix the reported video-loading failure and isolate its root cause.
+- Confirm current local-file, HTTP and torrent playback in the complete app on Xbox.
+- Validate public peers/DHT, metadata, buffering, pause/seek, audio sync and long playback.
+- Check UI8 search, QR scanning and account switching on physical hardware.
+- PIN-protected profiles, subtitle support and currently disabled settings remain incomplete.
+- Catalog/image cache persistence, peak RAM/performance measurements and remaining
+  synchronous network operations need further work.
 
-## Conversion setup
+Native HEVC/AV1/DRM and video above 720p are unsupported. uTP, BitTorrent v2 and
+IPv6 are not implemented. The optional PC converter prepares an entire file;
+it is not an on-console real-time solution. Real AV1/TorrServer paths are unverified.
 
-Run tools/start_transcoder.cmd on a Windows PC with Python 3.10+, FFmpeg and FFprobe. The script also supports an existing Stremio FFmpeg installation. Copy the generated private nuvio.cfg alongside NUVIO.xex. Keep that PC and the service running and reachable from Xbox. Do not upload your configuration/token.
+## Validation boundaries
 
-The service converts the complete video before playback; it is not real-time streaming conversion. Long videos may take several minutes or exceed the 20-minute client preparation window. One conversion runs at a time, with a bounded disk cache. Only finite videos up to three hours are supported.
+Windows navigation/keyboard, isolated authentication, controlled torrent tests
+and XDK syntax checks passed. A newer local XEX is available and the linked image
+contains UI8. An older standalone Xenia local-file smoke test decoded a short
+H.264/AAC sample. Xenon host comparisons and opcode audits passed.
 
-Incompatible magnet sources require a real TorrServer for the external conversion service. Compatible native magnet playback remains a separate experimental path. No public torrent/conversion server is included. AV1 input requires a suitable installed FFmpeg decoder and has not been tested with a real sample.
+**These checks do not demonstrate successful playback of the user's sources.**
+Current hardware pixel equality, long playback, A/V sync and provider compatibility
+are pending. See [validation](VALIDATION.md) and [known issues](KNOWN_ISSUES.md).
 
 ## Installation
 
-Copy NUVIO.xex to a writable folder accessible through Aurora or XeXMenu. For optional conversion, also copy the generated nuvio.cfg to that folder. Keep your existing private session file on the console. A/Start pauses or resumes, Left/Right seeks ten seconds, and B exits playback.
+Download `NUVIO.xex` or the Xbox360 ZIP, copy it to a writable Aurora/XeXMenu
+folder and launch that file. Check `Xbox UI8 - 23.11.2026` in Settings. The source
+ZIP requires VS2010/XDK to build. Do not distribute private session/config files.
 
-## Known limitations
-
-Physical Xbox launch, sustained playback, public swarm discovery, exact A/V sync on hardware, subtitles, provider compatibility and peak total RAM still need hardware validation. 4K/HEVC/AV1/HDR are not decoded natively by this Xbox build; use the optional conversion worker. DRM is unsupported. Conversion can fail if the provider, codec filters, disk capacity or torrent resolver is unavailable.
-
-The project is unofficial and is not affiliated with Microsoft or NuvioMedia. The combined player executable includes GPL components; corresponding sources, pinned upstream references and license notices are provided.
+The release manifest and `SHA256SUMS.txt` identify the attached build. Corresponding
+source and license notices accompany this independent, unofficial GPL-containing
+player distribution. Proprietary XDK components are not included.

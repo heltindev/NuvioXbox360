@@ -1,63 +1,159 @@
-# NUVIO — v0.1.0-alpha.2
+# NUVIO for Xbox 360 — v0.1.0-alpha.2 / UI8
 
-Cliente nativo de TV para Xbox 360 RGH/JTAG, inspirado no NuvioTV. Abra **VisualStudio2010/Release/NUVIO.xex**.
+An experimental native TV client for Xbox 360 RGH/JTAG, inspired by NuvioMedia.
 
-## Esta versao
+> **UI8 source location:** use the [release/v0.1.0-alpha.2-ui8 branch](https://github.com/heltindev/NuvioXbox360/tree/release/v0.1.0-alpha.2-ui8) or the release source archive. `main` currently contains the updated documentation alongside older application code; the experimental UI8 code has not been merged into `main`. The build instructions below target that release branch.
 
-- Interface preta com foco branco, sem animacoes, sem popup por cima dos cartazes.
-- Inicio com fundo, metadados e categorias dos addons; grade separada de filmes/series.
-- Analogico esquerdo, analogico direito e direcional digital, com zona morta e repeticao.
-- Capas de 160x240 em um cache de somente 12 texturas; apenas itens visiveis sao baixados.
-- Downloads de capas, metadados, fontes e alteracoes de addons fora da thread de desenho.
-- Respostas HTTP de metadados/imagens limitadas a 2 MiB e imagens verificadas antes de descomprimir.
-- Player nativo FFmpeg, renderizacao YUV na GPU e audio XAudio2. Filas de pacotes limitadas em quantidade e bytes, tres quadros de video e audio estereo.
-- Conta QR, sessao salva, addons por perfil, busca, biblioteca e logout mantidos.
-- Barra lateral com botoes de 60 pixels, icones de 40 pixels e nomes ao focar.
-- Cliente torrent v1 experimental integrado ao player: metadados e partes verificados com SHA-1, duas partes em cache (ate 8 MiB), sem baixar o filme inteiro em RAM.
+> **VIDEO PLAYBACK IS STILL FAILING. THIS IS NOT A STABLE STREAMING RELEASE.**
+> On November 23, 2026, the maintainer reported that selecting a video still
+> produces an error and the video does not load. End-to-end playback remains
+> unresolved. UI, torrent and decoder changes do not establish working playback.
 
-## Controles
+[Releases](https://github.com/heltindev/NuvioXbox360/releases) ·
+[Playback issue #4](https://github.com/heltindev/NuvioXbox360/issues/4) ·
+[Known issues](docs/KNOWN_ISSUES.md) · [Roadmap](ROADMAP.md)
 
-| Tela | Controles |
+## Current status
+
+| Area | Implemented | Still missing or failing |
+| --- | --- | --- |
+| Interface | Four sidebar items, rounded cards and focus, details actions, controller input | Final visual/controller checks on physical hardware |
+| Search | Live keyboard text, input while artwork loads, queued searches and result navigation | Confirmation with real add-ons on Xbox after the UI8 fix |
+| Account | Official QR pairing, saved session, profiles, Account page and Sign out | Real-device QR scanning and account-switch regression checks |
+| Catalog/library | Add-on discovery, cloud library and bounded session caches | Catalog/image cache does not survive app exit |
+| Playback | FFmpeg, GPU YUV rendering and XAudio2 integration | **Video still fails to load in the maintainer's test** |
+| Torrent | Experimental v1 TCP client, trackers/DHT, metadata and piece verification | Real-peer metadata reliability and full torrent-to-decoder playback |
+| Formats | Native limit of 1280×720; incompatible-source warnings | No native HEVC, AV1, DRM or higher-resolution decoding |
+| Conversion | Optional PC-side authenticated FFmpeg service | Complete-file preparation, external dependencies and hardware validation |
+
+See [the issue tracker](https://github.com/heltindev/NuvioXbox360/issues) for
+reported failures. A passing build or isolated test is not a playback guarantee.
+
+## What's new in UI8
+
+- Search accepts controller keyboard input during catalog/artwork downloads and
+  displays the text being edited. Long text follows the cursor.
+- Settings → You (`Voce`) → Account (`Conta`) shows account status and email.
+  Sign out waits for the active request, clears local account state and opens a
+  fresh QR login. It does not delete the cloud account or cloud library.
+- Split purple login layout, a white QR background and whole-pixel QR modules.
+- Correct category icons: person, palette, play, chain links and gear.
+- Deferred input is discarded when changing screens.
+
+The GitHub documentation is in English. Existing in-app Portuguese labels are
+referenced above so users can find the same controls in this build.
+
+Earlier UI7 changes added rounded selection outlines, visible details buttons,
+cache/search handling, torrent metadata retries and H.264 Xenon safety work.
+These are implementation changes; playback issue #4 remains open.
+
+## Download and install
+
+Use the files attached to the [latest experimental release](https://github.com/heltindev/NuvioXbox360/releases).
+The source archives alone do not contain a ready-to-run XEX.
+
+1. Copy `NUVIO.xex` to a writable USB/HDD folder accessible from Aurora or XeXMenu.
+2. Launch that exact executable. If your installation uses `default.xex`, replace
+   the file your dashboard actually launches with the new build under that name.
+3. Use the official QR flow at [nuvio.tv/link](https://nuvio.tv/link), then select a profile.
+4. Check **Xbox UI8 - 23.11.2026** in Settings to distinguish it from an old build.
+5. Treat media selection as an experimental test; video playback is unresolved.
+
+Never include `nuvio_session.dat`, private `nuvio.cfg`, tokens or personal caches
+in bug reports. The release packages exclude local account/configuration data.
+See [the installation guide](INSTALL-ON-XBOX.txt).
+
+## Build from source
+
+Requires Visual Studio 2010 with Visual C++ and a separately installed Xbox 360 XDK.
+Run `VisualStudio2010/BUILD-RELEASE.cmd` from the extracted repository. It restores
+pinned missing dependencies and rebuilds the required libraries and application.
+
+Alternatively, from the `VisualStudio2010` directory:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\prepare_release.ps1
+```
+
+Wait for `READY`. The output is `VisualStudio2010/Release/NUVIO.xex`, also copied
+from `VisualStudio2010/bin/Release/NUVIO.xex`. If a build fails, do not redistribute
+an older executable left in either directory. See [development](docs/DEVELOPMENT.md).
+
+Missing `mbedtls/ssl.h` (C1083) or `video.lib` (LNK1181) means dependencies have
+not been restored/built. C4244 numeric-conversion warnings are not fatal errors.
+Do not redistribute proprietary XDK headers, tools, libraries or installers.
+
+## Controls
+
+| Screen | Controls |
 | --- | --- |
-| Inicio | Direcionais/analogicos: navegar; A: detalhes; X: atualizar; Y: buscar; LB/RB: grupos de categorias |
-| Filmes e series | Y: trocar Filmes/Series/Todos; Start: buscar; A: detalhes |
-| Busca | A: tecla; X: apagar; Y: espaco; Start: pesquisar |
-| Detalhes | A: escolher episodio/fontes; X: salvar na biblioteca |
-| Fontes | A: reproduzir a fonte selecionada; X: atualizar; B: voltar |
-| Player | A/Start: pausar/continuar; esquerda/direita: voltar/avancar 10 segundos; B: sair do video |
-| Configuracoes | Addons, trocar perfil, sincronizar conta e sair; Y: sair da conta |
-| Addons | A: ativar/desativar ou instalar URL; X: remover; Y: sincronizar |
+| Home | D-pad/sticks: navigate; A: details; X: refresh; Y: search; LB/RB: catalog groups |
+| Search keyboard | A: key/action; X: delete; Y: space; LB/RB: shift; Start: search; B: Home |
+| Search results | A: details; B: edit the query; X: refresh |
+| Details | A: episodes/sources; X: save to library |
+| Sources | A: try playback; X: refresh; B: back |
+| Player | A/Start: pause; Left/Right: seek 10 seconds; B: leave; A/B: dismiss playback error |
+| Settings | A: open implemented options; B: Home; Y: Account |
+| Account | A on Sign out: clear session and reopen QR; B: Settings |
+| Media → Streaming P2P | A: toggle P2P, hide statistics or clear torrent metadata cache; B: Settings |
+| Add-ons | A: toggle/install; X: remove; Y: synchronize; B: back |
 
-## Conversao automatica
+Unimplemented settings are dimmed and disabled. PIN-protected profiles cannot be
+unlocked in this client yet.
 
-O cliente integra um servidor opcional de conversao para MP4 H.264/SDR ate 720p com AAC estereo. Para iniciar no PC, execute `tools/start_transcoder.cmd`; copie o `nuvio.cfg` gerado junto com o XEX. O PC precisa ficar ligado. O servidor prepara o arquivo completo antes de reproduzir. Leia [docs/TRANSCODING.md](docs/TRANSCODING.md) para configuracao, magnet/TorrServer e limites.
+## Playback, formats and torrents
 
-## Formatos e torrents
+For controlled tests, prefer authorized **H.264/AVC up to 720p with AAC stereo**.
+Even these sources are not guaranteed to work through the full application yet.
+The player also includes legacy codecs, subject to the bundled FFmpeg demuxers.
+Native HEVC/H.265, AV1, DRM, 1080p and 4K are unsupported by this build's limits.
+Known incompatible links are dimmed and display a clear error; unknown formats
+are inspected by the decoder when opened.
 
-Escolha fontes **H.264/AVC ate 720p**, de preferencia com audio AAC estereo. A biblioteca do player tambem oferece codecs legados, mas o teste automatizado desta alteracao validou H.264/AAC em MP4. HEVC/H.265, AV1, DRM e 1080p nao sao garantidos; fontes acima de 1280x720 sao recusadas para manter o consumo limitado.
+HTTP/HTTPS uses provider headers, bounded redirects and HTTP Range. Magnet,
+infoHash and `torrent://hash/fileIdx` sources use an experimental in-XEX torrent
+client, with trackers/DHT IPv4, `ut_metadata`, SHA-1 checks and multi-file selection.
+It supports v1 TCP peers without protocol encryption, metadata up to 1 MiB and
+two cached pieces of up to 4 MiB each. It does not implement uTP, BitTorrent v2,
+IPv6 or native codec conversion. Solving metadata retrieval does not add codecs.
 
-Links HTTP/HTTPS dos addons entram diretamente no player, com cabecalhos do provedor, redirecionamentos limitados e HTTP Range.
+P2P settings are saved in `nuvio_p2p.cfg`. The last verified metadata entry may be
+saved in `nuvio_last_torrent.meta`; movie data remains in bounded temporary memory.
+The loading percentage represents preparation phases and initial buffering, not
+the percentage of the entire movie downloaded. Peer availability affects results.
 
-Fontes magnet/infoHash agora entram no cliente BitTorrent **dentro do XEX**, que busca peers por tracker UDP/HTTP ou DHT IPv4, obtem metadados por `ut_metadata`, verifica as partes e entrega os bytes ao FFmpeg. O indice `fileIdx` do addon seleciona o arquivo correto de um torrent com varios arquivos. Nao precisa de um processo rodando no PC para esse caminho.
+## Optional conversion service
 
-Esta implementacao e experimental: aceita torrents v1/SHA-1 por TCP sem criptografia de protocolo, metadados de ate 1 MiB e partes de ate 4 MiB. Nao implementa uTP, BitTorrent v2, IPv6 ou conversao de codec. A velocidade depende de peers compativeis e das partes disponiveis. O teste controlado no Windows passou; o novo caminho completo no Xbox/emulador ainda precisa ser confirmado.
+`tools/start_transcoder.cmd` starts a PC-side Python/FFmpeg worker. It prepares a
+complete H.264 Main 3.1 MP4, up to 720p/24 fps, SDR BT.709 and AAC stereo. The PC
+must remain running and reachable; this is **not real-time conversion on Xbox**.
+Incompatible magnets require an actual TorrServer for that external path. No
+public server is supplied. AV1 input depends on the PC's FFmpeg and remains untested.
+Read [conversion setup and limits](docs/TRANSCODING.md).
 
-Se voce ja utiliza TorrServer, a configuracao opcional abaixo continua encaminhando o magnet para ele:
+## Validation and remaining work
 
-```
-torrent_server=https://SEU-SERVIDOR
-```
+- UI8 navigation/keyboard and isolated authentication tests passed on Windows;
+  Xbox UI/graphics sources passed the XDK syntax check.
+- A newer local XEX and linked executable are available; the linked image
+  contains the UI8 marker. File hashes are recorded in the release manifest.
+- Controlled Windows tracker/peer tests covered metadata, piece checks, seek,
+  multi-file torrents and corrupted-data rejection.
+- An **earlier**, separate local-file Xenia smoke test decoded H.264 854×480/AAC:
+  52 frames decoded, 48 displayed and zero dropped in that short test.
+- H.264 Xenon host checks and opcode audits passed. Native pixel equality and
+  performance of that adaptation still require the Xbox verifier.
 
-Nao existe servidor publico predefinido. Uma fonte 4K/H.265 continua exigindo conversao externa para formato leve; resolver o torrent nao muda o codec do video.
+**None of those checks resolves the maintainer's current video-loading failure.**
+Current public-swarm playback, sustained A/V synchronization, provider behavior,
+peak total RAM, subtitles and physical Xbox reliability remain pending.
 
-## Verificacao
+[Validation details](docs/VALIDATION.md) · [Decoder work](docs/DECODER-XENON.md) ·
+[Release notes](docs/RELEASE_NOTES.md) · [Checklist](docs/CHECKLIST.md)
 
-O player foi executado no Xenia Canary com um arquivo de teste H.264 854x480/AAC 48 kHz estereo: 52 quadros decodificados, 48 exibidos, zero descartados no teste curto. O novo cliente torrent passou no Windows com tracker UDP e peer TCP controlados: arquivo completo de 4.372.373 bytes, verificacao de partes, busca e recusa de dados corrompidos. Esse teste e separado do teste anterior de arquivo local no Xenia. Navegacao, entrada analogica, autenticacao, addons e selecao de fontes possuem testes locais. Isso nao comprova todos os codecs, provedores nem desempenho do Xbox fisico. Veja [docs/VALIDATION.md](docs/VALIDATION.md).
+## License and project status
 
-## Compilacao
-
-Abra `VisualStudio2010/NUVIO.sln` no VS2010 com XDK e selecione Release | Xbox 360. `build_decoder.ps1` compila as dependencias do decoder e `build_native_tls.ps1` compila HTTPS/TLS quando necessario. Preserve ThirdParty e suas licencas.
-
-O cache `nuvio_session.dat` e privado da conta. Nao o compartilhe. O aplicativo permanece nao oficial. Consulte [NOTICE.md](NOTICE.md) para as licencas do player combinado.
-
-Source build: run `VisualStudio2010/bootstrap_dependencies.ps1`, then `build_native_tls.ps1`, `build_decoder.ps1` and build `NUVIO.vcxproj`. See [release notes](docs/RELEASE_NOTES.md) and [checklist](docs/CHECKLIST.md).
+This is an independent, unofficial project, unaffiliated with Microsoft or
+NuvioMedia. Original NUVIO source retains its Apache-2.0 notice. The combined
+player includes GPL components and is distributed with corresponding source,
+license texts and pinned upstream references. Read [NOTICE.md](NOTICE.md).

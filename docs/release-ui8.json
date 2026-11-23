@@ -1,0 +1,14 @@
+{
+  "version": "v0.1.0-alpha.2",
+  "ui_revision": "UI8",
+  "date": "2026-11-23",
+  "xex": {
+    "file": "NUVIO.xex",
+    "bytes": 10530816,
+    "sha256": "52ead56fda9dd70bcd997006d9d0428a905d580a499422b1fd8f9574b1540e76"
+  },
+  "linked_image_contains_ui8": true,
+  "playback_status": "unresolved_user_report_video_does_not_load",
+  "tracking_issue": "https://github.com/heltindev/NuvioXbox360/issues/4",
+  "physical_hardware_playback_verified": false
+}
