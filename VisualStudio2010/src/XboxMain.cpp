@@ -142,6 +142,7 @@ static void DrawLanguageFlag(NuvioGraphics &g,float x,float y,const char *countr
 static NuvioCatalog g_catalog;
 static FFPlayer *g_player=NULL;
 static DWORD g_playerInputAt=0;
+static DWORD g_playerReadyAt=0;
 static NuvioAddonList g_addons;
 static char g_status[120] = "";
 static int g_controllerPort = -1; // -1 means no controller reported by XInput
@@ -1118,7 +1119,11 @@ static void DrawScreen(NuvioGraphics &g, const NuvioState &state,
         g_videoDevice->SetRenderState(D3DRS_VIEWPORTENABLE,TRUE);
         D3DRECT screen={0,0,1280,720};g_player->RenderFrame(screen);
         g.ResumeUI();
-        if(g_player->IsBuffering()&&!g_player->Failed()) {
+        const bool loading=g_player->IsBuffering();
+        if(loading)g_playerReadyAt=0;
+        else if(!g_player->Failed()&&!g_playerReadyAt)g_playerReadyAt=GetTickCount();
+        // Keep the completed 100% briefly visible after the first frame.
+        if((loading||(g_playerReadyAt&&GetTickCount()-g_playerReadyAt<700))&&!g_player->Failed()) {
             std::wstring wide=g_player->StatusText();std::string status(wide.begin(),wide.end());
             if(g_playingTorrent&&g_hideTorrentStats)status="Carregando video P2P...";
             const int percent=g_player->StartupPercent();
@@ -1490,7 +1495,7 @@ int main() {
             if(bA||bStart)g_player->TogglePause();
             if(bLeft)g_player->SeekRelative(-10);
             if(bRight)g_player->SeekRelative(10);
-            if(bB) {delete g_player;g_player=NULL;g_playingTorrent=false;app.screen=NUVIO_SCREEN_SOURCES;}
+            if(bB) {delete g_player;g_player=NULL;g_playingTorrent=false;g_playerReadyAt=0;app.screen=NUVIO_SCREEN_SOURCES;}
             break;
 
         case NUVIO_SCREEN_P2P_SETTINGS:
@@ -1679,7 +1684,7 @@ int main() {
                             std::vector<std::wstring> labels;labels.push_back(L"Nuvio");
                             g_playingTorrent=source.url.find("magnet:?")==0;
                             g_player->Open(urls,labels,source.headers,0,0,0,source.prepareBody);
-                            app.screen=NUVIO_SCREEN_PLAYER;g_playerInputAt=GetTickCount();
+                            app.screen=NUVIO_SCREEN_PLAYER;g_playerInputAt=GetTickCount();g_playerReadyAt=0;
                         }
                     }
                 }
