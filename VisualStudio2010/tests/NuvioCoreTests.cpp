@@ -1,6 +1,7 @@
 #include "../src/NuvioApp.h"
 #include "../src/NuvioCatalog.h"
 #include "../src/NuvioInput.h"
+#include "../src/StreamCompat.h"
 
 #include <cassert>
 #include <cstring>
@@ -25,6 +26,23 @@ static void TypeText(NuvioState *s, const char *text)
 
 int main(int argc, char **argv)
 {
+    // Title hints are only advisory; the native decoder still inspects the stream.
+    assert(ClassifyStream("Filme 720p H.264 AVC").support == STREAM_OK);
+    assert(ClassifyStream("Filme XviD SD").support == STREAM_OK);
+    assert(ClassifyStream("Filme 720p x265").support == STREAM_UNSUPPORTED);
+    assert(ClassifyStream("Filme 1080p x264").support == STREAM_UNSUPPORTED);
+    assert(ClassifyStream("Filme 4K HDR10 HEVC").support == STREAM_UNSUPPORTED);
+    assert(ClassifyStream("Filme AV1 720p").support == STREAM_UNSUPPORTED);
+    assert(ClassifyStream("Filme Hi10P 720p").support == STREAM_UNSUPPORTED);
+    assert(ClassifyStream("Filme 1440p").support == STREAM_UNSUPPORTED);
+    assert(ClassifyStream("Filme Widevine DRM").support == STREAM_UNSUPPORTED);
+    assert(ClassifyStream("Filme VP9").support == STREAM_UNSUPPORTED);
+    assert(ClassifyStream("Filme TeleCine").support == STREAM_UNKNOWN);
+    assert(ClassifyStream("Filme hdrip h264").support == STREAM_OK);
+    assert(ClassifyStream("Filme av1scene h264").support == STREAM_OK);
+    assert(ClassifyStream("Filme H.264 1080p").support == STREAM_UNSUPPORTED);
+    assert(std::strlen(UnsupportedMessage())>10);
+
     assert(NuvioStickDirections(0,0)==0);
     assert(NuvioStickDirections(8999,0)==0);
     assert(NuvioStickDirections(-16000,2000)==4);
