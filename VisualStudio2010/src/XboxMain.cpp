@@ -652,19 +652,21 @@ static void DrawCreateProfileScreen(NuvioGraphics &g, const NuvioState &state) {
 
 // ============ SIDEBAR ============
 static void DrawSidebar(NuvioGraphics &g, const NuvioState &state) {
+    // Exactly four navigation destinations, matching Nuvio's desktop sidebar.
     const bool expanded=state.sidebarFocused;
-    const float width=expanded?260.0f:88.0f;
+    const float width=expanded?248.0f:80.0f;
     g.Rect(0,0,width,720,Color(13,13,13));
-    if(g.HasAvatar(state.profileIndex))g.Avatar(state.profileIndex,24,24,40);
-    else {g.Circle(44,44,20,Color(65,65,65));g.Text(35,29,24,"N",TEXT_WHITE);}
-    if(expanded)g.Text(82,31,22,state.profileName,TEXT_WHITE,170);
-    const char *labels[]={"Inicio","Filmes e series","Busca","Biblioteca","Configuracoes"};
-    for(int i=0;i<5;++i) {
-        const float y=222.0f+i*76.0f;
+    if(g.HasAvatar(state.profileIndex))g.Avatar(state.profileIndex,22,40,37);
+    else {g.Circle(41,59,19,Color(65,65,65));g.Text(33,45,23,"N",TEXT_WHITE);}
+    if(expanded)g.Text(76,44,21,state.profileName,TEXT_WHITE,165);
+    const char *labels[]={"Inicio","Busca","Biblioteca","Configuracoes"};
+    const int iconIndex[]={0,2,3,4}; // Native atlas: home, search, library, settings.
+    for(int i=0;i<4;++i) {
+        const float y=278.0f+i*51.0f;
         const bool active=state.sidebarItem==i;
-        if(active)g.RoundedRect(14,y-10,expanded?232.0f:60.0f,60,16,expanded?TEXT_WHITE:Color(35,35,35));
-        g.Icon(i,24,y,40,active&&expanded?BG_DARK:active?TEXT_WHITE:TEXT_DIM);
-        if(expanded)g.Text(84,y+7,21,labels[i],active?BG_DARK:TEXT_MUTED,165);
+        if(active)g.RoundedRect(17,y-4,expanded?217.0f:46.0f,44,12,TEXT_WHITE);
+        g.Icon(iconIndex[i],27,y+5,25,active?BG_DARK:Color(149,154,160));
+        if(expanded)g.Text(78,y+7,20,labels[i],active?BG_DARK:TEXT_MUTED,155);
     }
 }
 
@@ -683,29 +685,42 @@ static void DrawWrapped(NuvioGraphics &g,float x,float y,float size,const char *
     }
 }
 static void DrawPosterCard(NuvioGraphics &g,const NuvioCatalog &catalog,int index,
-                          float x,float y,bool focused,bool) {
+                           float x,float y,bool focused,bool) {
     if(index<0||index>=catalog.count)return;
     const NuvioCatalogItem &item=catalog.items[index];
-    const float w=180,h=240;
-    if(focused)g.Rect(x-3,y-3,w+6,h+6,TEXT_WHITE);
-    if(g.HasPoster(index))g.Poster(index,x,y,w,h);
-    else {g.Rect(x,y,w,h,Color(28,28,28));g.Text(x+14,y+104,14,"Nuvio",TEXT_DIM);}
+    const float w=180,h=240,r=13;
+    if(focused)g.RoundedRect(x-3,y-3,w+6,h+6,r+3,TEXT_WHITE);
+    if(g.HasPoster(index))g.PosterRounded(index,x,y,w,h,r,BG_DARK);
+    else {
+        g.RoundedRect(x,y,w,h,r,Color(28,28,28));
+        g.Logo(x+71,y+89,45);
+    }
     g.Text(x,y+h+8,17,item.title,TEXT_WHITE,w);
     if(item.year){char year[12];std::sprintf(year,"%d",item.year);g.Text(x,y+h+31,14,year,TEXT_DIM);}
 }
 static void DrawHeroBanner(NuvioGraphics &g,const NuvioCatalog &catalog,int index) {
     if(index<0||index>=catalog.count)return;
     const NuvioCatalogItem &item=catalog.items[index];
-    if(g.HasBackdrop()&&g_previewIndex==index)g.Backdrop(88,0,1192,365);
-    else g.Rect(88,0,1192,365,Color(17,17,17));
-    for(int i=0;i<16;++i)g.Rect(88+i*64.0f,0,64,365,Color(13,13,13,220-i*11));
-    for(int i=0;i<8;++i)g.Rect(88,285+i*10.0f,1192,10,Color(13,13,13,35+i*28));
-    g.Text(112,100,38,item.title,TEXT_WHITE,1010);
-    char meta[160];std::sprintf(meta,"%s  |  %d  %s  %s",item.type=='S'?"Series":"Filme",item.year,
+    // Large cinematic backdrop with soft left and bottom fades for readable details.
+    if(g.HasBackdrop()&&g_previewIndex==index)g.Backdrop(80,0,1200,625);
+    else g.Rect(80,0,1200,625,Color(17,17,17));
+    for(int i=0;i<24;++i)
+        g.Rect(80+i*50.0f,0,50,625,Color(13,13,13,i<18?236-i*13:0));
+    for(int i=0;i<24;++i)
+        g.Rect(80,330+i*13.0f,1200,13,Color(13,13,13,12+i*10));
+    g.Text(112,258,54,item.title,TEXT_WHITE,1050);
+    char meta[160];
+    std::sprintf(meta,"%s  |  %d  %s  %s",item.type=='S'?"Series":"Filme",item.year,
         g_previewIndex==index?g_preview.runtime:"",g_previewIndex==index?g_preview.genres:"");
-    g.Text(112,158,17,meta,TEXT_MUTED,1000);
-    if(g_previewIndex==index)DrawWrapped(g,112,196,18,g_preview.description,90,3);
-    g.RoundedRect(112,292,158,40,20,TEXT_WHITE);g.Text(130,301,18,"A  Ver detalhes",BG_DARK);
+    g.Text(112,335,19,meta,TEXT_WHITE,1050);
+    if(g_previewIndex==index)DrawWrapped(g,112,385,19,g_preview.description,78,3);
+    g.RoundedRect(112,508,166,43,22,TEXT_WHITE);
+    g.Text(131,518,19,"Ver detalhes",BG_DARK);
+    // A few restrained indicators echo the original featured-content carousel.
+    for(int i=0;i<7;++i) {
+        if(i==0)g.RoundedRect(1082+i*23.0f,558,28,7,4,TEXT_WHITE);
+        else g.Circle(1095+i*23.0f,561,4,Color(221,221,221));
+    }
 }
 
 // ============ ROW SECTION ============
@@ -746,7 +761,7 @@ static void DrawHomeScreen(NuvioGraphics &g,const NuvioState &state,const NuvioC
     const int hero=NuvioCatalogIndexForRow(&catalog,row,state.selectedColumn);
     if(row==0)DrawHeroBanner(g,catalog,hero);
     else g.Text(112,32,30,"Inicio",TEXT_WHITE);
-    DrawRowSection(g,catalog,state,row,rail.name,rail.start,rail.count,row==0?407:115);
+    DrawRowSection(g,catalog,state,row,rail.name,rail.start,rail.count,row==0?650:115);
     if(row>0&&row+1<catalog.railCount) {
         const NuvioCatalogRail &next=catalog.rails[row+1];
         DrawRowSection(g,catalog,state,row+1,next.name,next.start,next.count,455);
@@ -901,55 +916,69 @@ static void DrawLibraryScreen(NuvioGraphics &g, const NuvioState &state, bool on
 }
 
 // ============ SETTINGS SCREEN ============
-static void DrawMenuItem(NuvioGraphics &g, float x, float y, float w, const char *title,
-                         const char *subtitle, bool focused) {
-    if (focused) g.RoundedRect(x - 3, y - 3, w + 6, 78, 15, FOCUS_BLUE);
-    g.RoundedRect(x, y, w, 72, 12, focused ? BG_HOVER : BG_CARD);
-    g.Text(x + 24, y + 10, 24, title, TEXT_WHITE);
-    g.Text(x + 24, y + 42, 16, subtitle, TEXT_MUTED, w - 80);
-    g.Text(x + w - 40, y + 16, 32, ">", focused ? TEXT_WHITE : TEXT_DIM);
-}
-
 static void DrawSettingsScreen(NuvioGraphics &g, const NuvioState &state, bool online) {
-    DrawGradientBackground(g);
-    DrawUserBadge(g, state, online);
+    (void)online;
+    g.Rect(0,0,SCREEN_WIDTH,SCREEN_HEIGHT,BG_DARK);
+    // The 80px global navigation rail is drawn above this view.
+    g.Rect(80,0,218,720,Color(27,27,27));
+    g.Text(101,112,30,"Configura",TEXT_WHITE);
+    g.Text(101,147,30,"coes",TEXT_WHITE);
+    g.Rect(80,199,218,1,Color(61,61,61));
 
-    g.Text(110, 40, 36, "Settings", TEXT_WHITE);
-
-    // Profile card
-    g.RoundedRect(110, 110, 520, 140, 12, BG_CARD);
-    const NuvioProfile &p = state.profiles[state.profileIndex];
-    DrawProfileAvatar(g, 180, 180, 40, ProfileColor(p.color), state.profileName, state.profileIndex == 0);
-    g.Text(250, 150, 26, state.profileName, TEXT_WHITE);
-    g.Text(250, 188, 16, state.profileIndex == 0 ? "Primary profile" : "Profile", TEXT_MUTED);
-    if (online) g.Text(250, 214, 16, "Nuvio cloud: connected", ACCENT_GREEN);
-    else g.Text(250, 214, 16, "Nuvio cloud: awaiting catalog", Color(200, 180, 0));
-
-    // Menu
-    char sub[96];
-    std::sprintf(sub, "%d installed, %d enabled%s", g_addons.count,
-                 NuvioAddonsEnabledCount(&g_addons),
-                 g_addons.fromCloud ? "" : "  (not synchronized)");
-    const bool menuActive = !state.sidebarFocused;
-    DrawMenuItem(g, 110, 260, 520, "Addons", sub, menuActive && state.selectedRow == 0);
-    DrawMenuItem(g, 110, 338, 520, "Switch profile", state.profileName, menuActive && state.selectedRow == 1);
-    DrawMenuItem(g, 110, 416, 520, "Streaming P2P",
-                 g_p2pEnabled?"Torrent streams enabled":"Torrent streams disabled",menuActive && state.selectedRow == 2);
-    DrawMenuItem(g, 110, 494, 520, "Sync account", "Reload cloud addons and catalog",menuActive && state.selectedRow == 3);
-    DrawMenuItem(g, 110, 572, 520, "Sign out", "Erase account session",menuActive && state.selectedRow == 4);
-
-    // Application card
-    g.RoundedRect(680, 110, 490, 240, 12, BG_CARD);
-    g.Text(704, 126, 22, "Application", TEXT_WHITE);
-    g.Text(704, 164, 16, "NUVIO 0.1.0-alpha.2", TEXT_WHITE);
-    g.Text(704, 192, 16, "Xbox 360 native streaming interface", TEXT_MUTED);
-    g.Text(704, 220, 16, "Catalog: Nuvio and enabled cloud addons", TEXT_MUTED);
-    g.Text(704, 248, 16, "Artwork: original addon metadata", TEXT_MUTED);
-    g.Text(704, 276, 16, "Network: Xbox-native TLS / direct internet", TEXT_MUTED);
-    g.Text(704, 316, 14, "Player nativo FFmpeg / XAudio2 (ate 720p)", TEXT_DIM);
-
-    DrawStatusLine(g, 646);
-    DrawControllerFooter(g,110,SCREEN_HEIGHT-36,"Up/Down: Choose    A: Open    B: Home    Y: Sign out");
+    const char *categories[]={"Voce","Visual","Midia","Servicos","Sistema"};
+    const int categoryIcons[]={3,4,1,2,4};
+    for(int c=0;c<5;++c) {
+        const float y=221+c*56.0f;
+        const bool selected=state.settingsCategory==c;
+        if(selected&&state.settingsCategoriesFocused&&!state.sidebarFocused)
+            g.RoundedRect(91,y-3,198,49,9,TEXT_WHITE);
+        if(selected)g.RoundedRect(94,y,192,43,8,Color(44,44,44));
+        g.RoundedRect(102,y+4,35,35,8,selected?Color(70,70,70):Color(34,34,34));
+        g.Icon(categoryIcons[c],110,y+12,19,selected?TEXT_WHITE:TEXT_DIM);
+        g.Text(149,y+10,20,categories[c],selected?TEXT_WHITE:Color(154,158,163),138);
+    }
+    const int cat=state.settingsCategory>=0&&state.settingsCategory<5?state.settingsCategory:0;
+    const char *titles[5][3]={
+        {"Conta","Alternar perfil","Sessao em grupo"},
+        {"Aparencia","Layout",NULL},
+        {"Conteudo e descoberta","Reproducao",NULL},
+        {"Integracoes","Rastreamento",NULL},
+        {"Avancadas","Sobre",NULL}
+    };
+    const char *subtitles[5][3]={
+        {"Conta e status de sincronizacao","Mude para um perfil diferente","Junte-se a amigos com um codigo de sessao"},
+        {"Temas, icone do app e idioma","Inicio, cartoes, detalhes, streams e navegacao",NULL},
+        {"Gerenciar addons e fontes de descoberta","Player, legendas e Streaming P2P",NULL},
+        {"Gerenciar integracoes disponiveis","Provedores para biblioteca e continuar assistindo",NULL},
+        {"Inicializacao e comportamento dos perfis","Informacoes do app, atualizacoes e creditos",NULL}
+    };
+    const int rowIcons[5][3]={{3,3,3},{4,3,0},{2,1,0},{2,3,0},{4,3,0}};
+    g.Text(328,112,31,categories[cat],TEXT_WHITE);
+    const int count=NuvioSettingsItemCount(cat);
+    const float panelX=327,panelY=157,panelW=925,rowH=61;
+    g.RoundedRect(panelX,panelY,panelW,count*rowH+16,18,Color(27,27,27));
+    for(int r=0;r<count;++r) {
+        const float y=panelY+8+r*rowH;
+        const bool enabled=NuvioSettingsItemEnabled(cat,r);
+        const bool focused=!state.sidebarFocused&&!state.settingsCategoriesFocused&&state.selectedRow==r;
+        if(focused)g.RoundedRect(panelX+8,y,panelW-16,rowH-1,10,Color(52,52,52));
+        if(focused&&enabled) {
+            g.RoundedRect(panelX+8,y,panelW-16,2,1,TEXT_WHITE);
+            g.RoundedRect(panelX+8,y+rowH-3,panelW-16,2,1,TEXT_WHITE);
+        }
+        g.RoundedRect(panelX+17,y+9,37,37,9,Color(51,51,51));
+        g.Icon(rowIcons[cat][r],panelX+26,y+18,19,enabled?TEXT_WHITE:Color(109,109,109));
+        g.Text(panelX+68,y+8,20,titles[cat][r],enabled?TEXT_WHITE:Color(112,112,112),panelW-105);
+        g.Text(panelX+68,y+34,16,subtitles[cat][r],enabled?TEXT_MUTED:Color(99,99,99),panelW-105);
+        if(!enabled)g.Text(panelX+panelW-124,y+14,14,"Em breve",Color(105,105,105));
+        if(r<count-1)g.Rect(panelX+67,y+rowH-1,panelW-84,1,Color(37,37,37));
+    }
+    g.Logo(740,435,26);
+    g.Text(772,436,23,"NUVIO",TEXT_WHITE);
+    g.Text(665,481,15,"Nuvio para Xbox 360",TEXT_DIM);
+    g.Text(685,506,14,"Versao experimental",TEXT_DIM);
+    DrawStatusLine(g,645);
+    DrawControllerFooter(g,328,685,"A: Abrir    B: Voltar    Y: Sair da conta");
 }
 
 // ============ STREAMING P2P SETTINGS ============
@@ -1715,7 +1744,7 @@ int main() {
         }
 
         default: {
-            if (app.screen == NUVIO_SCREEN_SETTINGS && (bY || (bA && !app.sidebarFocused && app.selectedRow == 4))) {
+            if (app.screen == NUVIO_SCREEN_SETTINGS && bY) {
                 if (AccountRequest(bridgeIp, "/account/logout")) {
                     NuvioInitialize(&app);
                     NuvioCatalogClear(&g_catalog);
@@ -1728,7 +1757,7 @@ int main() {
                 }
                 break;
             }
-            const int rowCount = app.screen == NUVIO_SCREEN_SETTINGS ? 5 :
+            const int rowCount = app.screen == NUVIO_SCREEN_SETTINGS ? NuvioSettingsItemCount(app.settingsCategory) :
                 app.screen==NUVIO_SCREEN_DISCOVER?(DiscoverCount(app,g_catalog)+4)/5:NuvioCatalogRowCount(&g_catalog);
             if (bLeft) NuvioMoveHorizontal(&app, -1);
             if (bRight) NuvioMoveHorizontal(&app, 1);
@@ -1744,10 +1773,7 @@ int main() {
                 while(app.selectedColumn>0&&DiscoverItem(app,g_catalog,app.selectedRow*5+app.selectedColumn)<0)--app.selectedColumn;
             }
             if (bB) NuvioBack(&app);
-            if (bA && app.screen == NUVIO_SCREEN_SETTINGS && !app.sidebarFocused && app.selectedRow == 3) {
-                ReloadCatalog(gui, bridgeIp, 0, 0, "", true);
-                currentCatalogPage = 0;
-            } else if (bA) NuvioSelect(&app,
+            if (bA) NuvioSelect(&app,
                 (app.screen == NUVIO_SCREEN_HOME || app.screen == NUVIO_SCREEN_DISCOVER)
                 ? FocusedMovieIndex(app, g_catalog)
                 : NuvioCatalogIndexForRow(&g_catalog, app.selectedRow, app.selectedColumn));
