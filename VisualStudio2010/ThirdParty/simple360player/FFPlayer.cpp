@@ -1273,8 +1273,10 @@ void FFPlayer::RenderFrame( const D3DRECT& screen )
 
 int FFPlayer::StartupPercent() const
 {
-    if( !m_active || m_ended ) return 0;
-    if( m_opened ) return m_haveFrame ? 100 : 95;
+    if( !m_active ) return 0;
+    if( m_opened && m_haveFrame ) return 100;
+    if( m_ended ) return 0;
+    if( m_opened ) return 95;
     int progress = m_preparingConversion ? 5 : 10;
     EnterCriticalSection( (CRITICAL_SECTION*)&m_lock );
     if( m_torrent ) progress = m_torrent->StartupPercent();
