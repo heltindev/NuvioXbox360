@@ -1,6 +1,6 @@
 # NUVIO — v0.1.0-alpha.2
 
-Cliente nativo de TV para Xbox 360 RGH/JTAG, inspirado no NuvioTV. Abra **VisualStudio2010/Release/NUVIO.xex**.
+Cliente nativo de TV para Xbox 360 RGH/JTAG, inspirado no NuvioTV. Depois de compilar, abra **VisualStudio2010/bin/Release/NUVIO.xex**.
 
 ## Esta versao
 
@@ -13,6 +13,8 @@ Cliente nativo de TV para Xbox 360 RGH/JTAG, inspirado no NuvioTV. Abra **Visual
 - Player nativo FFmpeg, renderizacao YUV na GPU e audio XAudio2. Filas de pacotes limitadas em quantidade e bytes, tres quadros de video e audio estereo.
 - Conta QR, sessao salva, addons por perfil, busca, biblioteca e logout mantidos.
 - Barra lateral com botoes de 60 pixels, icones de 40 pixels e nomes ao focar.
+- Indicador de carregamento inicial de 0 a 100% e pistas A/B/X/Y com cores nativas do controle.
+- Lista de fontes com bandeira de idioma quando o addon informa um idioma reconhecivel; `--` se nao houver informacao confiavel.
 - Cliente torrent v1 experimental integrado ao player: metadados e partes verificados com SHA-1, duas partes em cache (ate 8 MiB), sem baixar o filme inteiro em RAM.
 
 ## Controles
@@ -50,11 +52,15 @@ Essas opcoes nao garantem suporte a novos codecs, uTP ou torrents v2-only.
 
 Escolha fontes **H.264/AVC ate 720p**, de preferencia com audio AAC estereo. A biblioteca do player tambem oferece codecs legados, mas o teste automatizado desta alteracao validou H.264/AAC em MP4. HEVC/H.265, AV1, DRM e 1080p nao sao garantidos; fontes acima de 1280x720 sao recusadas para manter o consumo limitado.
 
-Links HTTP/HTTPS dos addons entram diretamente no player, com cabecalhos do provedor, redirecionamentos limitados e HTTP Range.
+Links HTTP/HTTPS dos addons entram diretamente no player, com cabecalhos do provedor, redirecionamentos limitados e HTTP Range. O player agora passa um nome de arquivo sem credenciais ou parametros da URL ao detector de conteiner do FFmpeg, para ajudar a reconhecer formatos com extensao em links HTTP. Isso nao adiciona decoders novos ao binario.
 
 Fontes magnet/infoHash e `torrent://hash/fileIdx` agora entram no cliente BitTorrent **dentro do XEX**, que busca peers por tracker UDP/HTTP ou DHT IPv4, obtem metadados por `ut_metadata`, verifica as partes e entrega os bytes ao FFmpeg. O indice `fileIdx` do addon seleciona o arquivo correto de um torrent com varios arquivos. Nao precisa de um processo rodando no PC para esse caminho.
 
 Nesta revisao, o cliente consulta mais de um tracker, usa trackers publicos apenas quando o magnet nao fornece nenhum e tenta peers adicionais via DHT quando os primeiros nao oferecem metadados. O indice `fileIdx` continua selecionando o arquivo dentro do torrent.
+
+O progresso de **0 a 100%** mostrado durante a abertura representa fases de preparacao e o buffer inicial; **nao** representa a porcentagem do filme baixado. O player P2P busca partes verificadas sob demanda, sem armazenar o filme inteiro. Ja a conversao opcional no PC prepara o arquivo convertido completo antes de reproduzir.
+
+O erro `Unknown container format` agora gera orientacao em portugues; se houver falha na leitura do torrent, o player prioriza a mensagem do torrent. MP4, MKV e AVI so tocam quando o demuxer e o codec existem no FFmpeg embarcado, dentro do limite de 720p. Nao ha como garantir HEVC, AV1, DRM ou todos os formatos com o FFmpeg 0.7 atual.
 
 Esta implementacao e experimental: aceita torrents v1/SHA-1 por TCP sem criptografia de protocolo, metadados de ate 1 MiB e partes de ate 4 MiB. Nao implementa uTP, BitTorrent v2, IPv6 ou conversao de codec. A velocidade depende de peers compativeis e das partes disponiveis. O teste controlado no Windows passou; o novo caminho completo no Xbox/emulador ainda precisa ser confirmado.
 
