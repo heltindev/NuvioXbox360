@@ -102,8 +102,9 @@ int main(int argc, char **argv)
     NuvioMoveVertical(&state, 1, 10);
     assert(state.sidebarItem == 1);
     NuvioSelect(&state, -1);
-    assert(state.screen == NUVIO_SCREEN_DISCOVER);
+    assert(state.screen == NUVIO_SCREEN_SEARCH);
     assert(!state.sidebarFocused);
+    NuvioOpenScreen(&state,NUVIO_SCREEN_DISCOVER); // Still reachable from catalog flow.
     NuvioMoveVertical(&state, 1, 4);
     assert(state.selectedRow == 1);
     NuvioSelect(&state, 9);
@@ -121,28 +122,47 @@ int main(int argc, char **argv)
     assert(state.screen == NUVIO_SCREEN_PROFILE);
     state.profiles[0].locked = 0;
 
-    // ---- Settings -> Plugins ----
+    // ---- Reference settings: five categories, only implemented actions enabled ----
     NuvioProfileSelect(&state);
     NuvioOpenScreen(&state, NUVIO_SCREEN_SETTINGS);
     assert(state.screen == NUVIO_SCREEN_SETTINGS);
-    NuvioSelect(&state, -1);                        // row 0 = Plugins
-    assert(state.screen == NUVIO_SCREEN_ADDONS);
-    NuvioMoveVertical(&state, 1, 7);
-    assert(state.selectedRow == 1);
+    assert(state.sidebarItem==3 && state.settingsCategoriesFocused);
+    assert(NuvioSettingsItemCount(0)==3 && NuvioSettingsItemCount(2)==2);
+    assert(!NuvioSettingsItemEnabled(0,0));
+    assert(NuvioSettingsItemEnabled(0,1));
+    assert(!NuvioSettingsItemEnabled(1,0));
+    assert(NuvioSettingsItemEnabled(2,0) && NuvioSettingsItemEnabled(2,1));
+    assert(!NuvioSettingsItemEnabled(4,1));
+    NuvioSelect(&state,-1); // Enter "Voce" category; "Conta" is disabled.
+    assert(!state.settingsCategoriesFocused);
+    NuvioSelect(&state,-1);
+    assert(state.screen==NUVIO_SCREEN_SETTINGS);
+    NuvioMoveVertical(&state,1,3);
+    NuvioSelect(&state,-1); // Alternar perfil is implemented.
+    assert(state.screen==NUVIO_SCREEN_PROFILE);
     NuvioBack(&state);
-    assert(state.screen == NUVIO_SCREEN_SETTINGS);
-    assert(std::strcmp(NuvioScreenName(NUVIO_SCREEN_ADDONS), "Plugins") == 0);
-    // P2P options live under settings; B never opens the profile picker.
-    state.selectedRow=2;
+    assert(state.screen==NUVIO_SCREEN_SETTINGS && state.settingsCategory==0 && state.selectedRow==1);
+    NuvioMoveHorizontal(&state,-1); // Back to category list.
+    NuvioMoveVertical(&state,1,3);
+    NuvioMoveVertical(&state,1,3);
+    assert(state.settingsCategory==2);
+    NuvioSelect(&state,-1);
+    assert(!state.settingsCategoriesFocused && state.selectedRow==0);
+    NuvioSelect(&state,-1);
+    assert(state.screen==NUVIO_SCREEN_ADDONS);
+    NuvioMoveVertical(&state,1,7);
+    assert(state.selectedRow==1);
+    NuvioBack(&state);
+    assert(state.screen==NUVIO_SCREEN_SETTINGS && state.settingsCategory==2 && state.selectedRow==0);
+    assert(std::strcmp(NuvioScreenName(NUVIO_SCREEN_ADDONS),"Plugins")==0);
+    NuvioMoveVertical(&state,1,2);
     NuvioSelect(&state,-1);
     assert(state.screen==NUVIO_SCREEN_P2P_SETTINGS && state.selectedRow==0);
-    assert(std::strcmp(NuvioScreenName(NUVIO_SCREEN_P2P_SETTINGS),"Streaming P2P")==0);
     NuvioBack(&state);
-    assert(state.screen==NUVIO_SCREEN_SETTINGS && state.selectedRow==2);
+    assert(state.screen==NUVIO_SCREEN_SETTINGS && state.settingsCategory==2 && state.selectedRow==1);
     NuvioBack(&state);
     assert(state.screen==NUVIO_SCREEN_HOME);
     NuvioOpenScreen(&state,NUVIO_SCREEN_SETTINGS);
-
 
     // ---- Plugin list ----
     NuvioAddonList addons;
