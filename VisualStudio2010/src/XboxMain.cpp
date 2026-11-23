@@ -1154,11 +1154,13 @@ static void DrawSourcesScreen(NuvioGraphics &g) {
         if(annotation)*annotation=0;
         if(!g_episodePicker) {
             DrawLanguageFlag(g,130,136+n*72,country);
-            if(unsupported)g.Rect(130,136+n*72,50,30,Color(13,13,13,155));
+
         }
         g.Text(g_episodePicker?130:200,unsupported?130+n*72:136+n*72,18,clean,
             unsupported?Color(122,122,122):TEXT_WHITE,g_episodePicker?1000:920);
         if(unsupported) {
+            // Fade all visuals, including country flag and source title.
+            g.RoundedRect(110,120+n*72,1050,62,10,Color(13,13,13,94));
             char warning[110];
             std::sprintf(warning,"Requer conversao: %s",compat.reason);
             g.Text(200,158+n*72,14,warning,Color(175,130,97),850);
@@ -1179,6 +1181,30 @@ static void DrawScreen(NuvioGraphics &g, const NuvioState &state,
 
     if(state.screen==NUVIO_SCREEN_PLAYER&&g_player) {
         g_player->Update();
+        // A decoder/demuxer failure gets a visible error view, not a black frame.
+        if(g_player->Failed()) {
+            const std::string &reason=g_player->Error();
+            const bool format=reason.find("Codec")!=std::string::npos||
+                reason.find("codec")!=std::string::npos||
+                reason.find("Container")!=std::string::npos||
+                reason.find("container")!=std::string::npos||
+                reason.find("Resolucao")!=std::string::npos;
+            g.Rect(0,0,SCREEN_WIDTH,SCREEN_HEIGHT,BG_DARK);
+            g.RoundedRect(186,146,908,424,22,Color(27,27,27));
+            g.Circle(263,223,30,Color(157,57,61));
+            g.Text(254,202,36,"!",TEXT_WHITE);
+            g.Text(313,190,30,format?"Formato nao suportado no Xbox 360":
+                "Nao foi possivel reproduzir",TEXT_WHITE,742);
+            g.Text(240,276,21,format?
+                "Escolha outro link em 720p com codec compativel.":
+                "A fonte nao abriu. Tente outro link ou atualize os addons.",TEXT_MUTED,795);
+            DrawWrapped(g,240,335,18,reason.c_str(),74,3);
+            g.RoundedRect(238,476,254,50,25,TEXT_WHITE);
+            g.Text(266,488,19,"Voltar aos links",BG_DARK);
+            DrawControllerFooter(g,238,538,"A: Voltar    B: Voltar");
+            g.End();
+            return;
+        }
         g_videoDevice->SetRenderState(D3DRS_VIEWPORTENABLE,TRUE);
         D3DRECT screen={0,0,1280,720};g_player->RenderFrame(screen);
         g.ResumeUI();
@@ -1554,7 +1580,15 @@ int main() {
 
         switch (app.screen) {
         case NUVIO_SCREEN_PLAYER:
-            if(pressed)g_playerInputAt=GetTickCount();
+            if(pressed)g_playerInputAt=GetTickCount();
+            if(g_player->Failed()) {
+                if(bA||bB||bStart) {
+                    SetStatus(g_player->Error().c_str());
+                    delete g_player;g_player=NULL;g_playingTorrent=false;
+                    g_playerReadyAt=0;app.screen=NUVIO_SCREEN_SOURCES;
+                }
+                break;
+            }
             if(bA||bStart)g_player->TogglePause();
             if(bLeft)g_player->SeekRelative(-10);
             if(bRight)g_player->SeekRelative(10);
